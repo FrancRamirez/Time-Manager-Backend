@@ -88,11 +88,13 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     }),
   });
 
-  if (!res.ok) {
-    throw new HttpError(401, "El refresh token de Google dejó de ser válido");
-  }
-  const data = (await res.json()) as GoogleTokenResponse;
-  return data.access_token;
+if (validAudiences.length && !validAudiences.includes(payload.aud)) {
+  throw new HttpError(
+    401,
+    `idToken no corresponde a esta app | aud=${payload.aud} | esperados=${JSON.stringify(
+      validAudiences.map((v) => `${v}`)
+    )}`
+  );
 }
 
 export interface GoogleCalendarEvent {
