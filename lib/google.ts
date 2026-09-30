@@ -44,7 +44,10 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdenti
     process.env.GOOGLE_WEB_CLIENT_ID,
   ].filter(Boolean);
   if (validAudiences.length && !validAudiences.includes(payload.aud)) {
-    throw new HttpError(401, "idToken no corresponde a esta app");
+    throw new HttpError(
+      401,
+      `idToken no corresponde a esta app | aud=${payload.aud} | esperados=${validAudiences.join(", ")}`
+    );
   }
 
   return { sub: payload.sub, email: payload.email, name: payload.name, picture: payload.picture };
@@ -88,13 +91,11 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     }),
   });
 
-if (validAudiences.length && !validAudiences.includes(payload.aud)) {
-  throw new HttpError(
-    401,
-    `idToken no corresponde a esta app | aud=${payload.aud} | esperados=${JSON.stringify(
-      validAudiences.map((v) => `${v}`)
-    )}`
-  );
+  if (!res.ok) {
+    throw new HttpError(401, "El refresh token de Google dejó de ser válido");
+  }
+  const data = (await res.json()) as GoogleTokenResponse;
+  return data.access_token;
 }
 
 export interface GoogleCalendarEvent {
