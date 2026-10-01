@@ -35,13 +35,13 @@ export interface HistoryMessage {
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
- * gemini-1.5-flash ya fue dado de baja. El modelo principal se puede cambiar
- * con GEMINI_MODEL sin tocar código; si responde 404/503 se prueba el de
- * respaldo (GEMINI_FALLBACK_MODEL).
+ * Los modelos 1.5 y 2.x ya no están disponibles para cuentas nuevas. El
+ * modelo principal se puede cambiar con GEMINI_MODEL sin tocar código; si
+ * responde 404/503 se prueba el de respaldo (GEMINI_FALLBACK_MODEL).
  */
 function modelChain(): string[] {
-  const primary = process.env.GEMINI_MODEL || "gemini-3.5-flash";
-  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-2.5-flash";
+  const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
+  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash";
   return primary === fallback ? [primary] : [primary, fallback];
 }
 
@@ -55,8 +55,8 @@ const TOTAL_BUDGET_MS = 25_000; // vercel.json: maxDuration = 30 s
 
 interface GeminiPart {
   text?: string;
-  functionCall?: { name: string; args?: Record<string, unknown> };
-  functionResponse?: { name: string; response: Record<string, unknown> };
+  functionCall?: { id?: string; name: string; args?: Record<string, unknown> };
+  functionResponse?: { id?: string; name: string; response: Record<string, unknown> };
   // Los modelos Gemini 3 devuelven thoughtSignature dentro de las parts: hay
   // que reenviar el content del modelo tal cual para que el function calling
   // multi-turno no falle. Por eso nunca reconstruimos esas parts a mano.
@@ -241,7 +241,7 @@ async function callGemini(
   tz: string,
   deadline: number
 ): Promise<GeminiResponse> {
-  let lastDetail = "";
+  const failures: string[] = [];
 
   for (const model of modelChain()) {
     const remaining = deadline - Date.now();
@@ -264,18 +264,18 @@ async function callGemini(
         signal: AbortSignal.timeout(Math.min(REQUEST_TIMEOUT_MS, remaining)),
       });
     } catch (err) {
-      lastDetail = `${model}: ${(err as Error).message}`;
+      failures.push(`${model}: ${(err as Error).message}`);
       continue; // timeout o red: probar el siguiente modelo
     }
 
     if (res.ok) return (await res.json()) as GeminiResponse;
 
-    lastDetail = `${model}: HTTP ${res.status} ${await res.text().catch(() => "")}`;
+    failures.push(`${model}: HTTP ${res.status} ${await res.text().catch(() => "")}`);
     // 404 = modelo dado de baja / 503 = sobrecargado: probar el de respaldo.
     if (res.status !== 404 && res.status !== 503) break;
   }
 
-  console.error("Gemini falló:", lastDetail);
+  console.error("Gemini falló:", failures.join(" || ") || "sin tiempo restante");
   throw new HttpError(502, "El asistente no está disponible en este momento");
 }
 
@@ -460,6 +460,7 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
     const content = data.candidates?.[0]?.content;
 
     if (!content?.parts?.length) {
+      console.error("Gemini sin contenido:", data.candidates?.[0]?.finishReason, data.promptFeedback);
       if (data.promptFeedback?.blockReason) {
         finalText = "No puedo ayudar con ese mensaje.";
       }
@@ -480,7 +481,7 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
 
     const responses: GeminiPart[] = [];
     for (const part of calls) {
-      const { name, args } = part.functionCall!;
+      const { id, name, args } = part.functionCall!;
       let response: ToolResult;
       try {
         response = await runTool(ctx, name, args ?? {});
@@ -493,7 +494,8 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
               : "Falló la consulta al calendario. Informa al usuario e intenta de nuevo más tarde.",
         };
       }
-      responses.push({ functionResponse: { name, response } });
+      // Gemini 3.x exige que la respuesta repita el id y el name de la llamada.
+      responses.push({ functionResponse: { ...(id ? { id } : {}), name, response } });
     }
     contents.push({ role: "user", parts: responses });
   }
