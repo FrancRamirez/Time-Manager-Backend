@@ -120,6 +120,8 @@ export async function listUpcomingEvents(accessToken: string, daysAhead: number)
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    console.error("Calendar list falló:", res.status, detail);
     throw new HttpError(502, "No se pudo consultar Google Calendar");
   }
   const data = (await res.json()) as { items?: GoogleCalendarEvent[] };
