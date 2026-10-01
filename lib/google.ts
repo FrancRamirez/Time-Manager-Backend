@@ -135,3 +135,75 @@ export async function deleteCalendarEvent(accessToken: string, eventId: string) 
     throw new HttpError(502, "No se pudo cancelar el evento en Google Calendar");
   }
 }
+
+export interface CalendarEventInput {
+  title?: string;
+  /** Hora local sin offset, formato "YYYY-MM-DDTHH:mm:ss" */
+  start?: string;
+  end?: string;
+  timeZone: string;
+  location?: string;
+  description?: string;
+}
+
+function toGoogleEventBody(input: CalendarEventInput) {
+  const body: Record<string, unknown> = {};
+  if (input.title !== undefined) body.summary = input.title;
+  if (input.location !== undefined) body.location = input.location;
+  if (input.description !== undefined) body.description = input.description;
+  if (input.start) body.start = { dateTime: input.start, timeZone: input.timeZone };
+  if (input.end) body.end = { dateTime: input.end, timeZone: input.timeZone };
+  return body;
+}
+
+export async function getCalendarEvent(
+  accessToken: string,
+  eventId: string
+): Promise<GoogleCalendarEvent | null> {
+  const res = await fetch(
+    `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (res.status === 404 || res.status === 410) return null;
+  if (!res.ok) {
+    throw new HttpError(502, "No se pudo consultar el evento en Google Calendar");
+  }
+  const event = (await res.json()) as GoogleCalendarEvent;
+  return event.status === "cancelled" ? null : event;
+}
+
+export async function createCalendarEvent(
+  accessToken: string,
+  input: CalendarEventInput
+): Promise<GoogleCalendarEvent> {
+  const res = await fetch(`${CALENDAR_API}/calendars/primary/events`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(toGoogleEventBody(input)),
+  });
+  if (!res.ok) {
+    console.error("Calendar create falló", res.status, await res.text().catch(() => ""));
+    throw new HttpError(502, "No se pudo crear el evento en Google Calendar");
+  }
+  return (await res.json()) as GoogleCalendarEvent;
+}
+
+export async function patchCalendarEvent(
+  accessToken: string,
+  eventId: string,
+  input: CalendarEventInput
+): Promise<GoogleCalendarEvent> {
+  const res = await fetch(
+    `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(toGoogleEventBody(input)),
+    }
+  );
+  if (!res.ok) {
+    console.error("Calendar patch falló", res.status, await res.text().catch(() => ""));
+    throw new HttpError(502, "No se pudo modificar el evento en Google Calendar");
+  }
+  return (await res.json()) as GoogleCalendarEvent;
+}
