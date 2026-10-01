@@ -1,6 +1,7 @@
 import { route, bodyOf, HttpError } from "../../lib/http";
 import { requireUser } from "../../lib/auth";
 import { sendMessageToGemini, type HistoryMessage } from "../../lib/gemini";
+import { parseSettings } from "../../lib/schedule";
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY = 12;
@@ -36,6 +37,7 @@ export default route(["POST"], async (req, res) => {
     message: body.message,
     history: parseHistory(body.history),
     timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
+    settings: parseSettings(body.settings),
   });
   res.status(200).json(result);
 });

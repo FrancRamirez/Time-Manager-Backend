@@ -2,21 +2,12 @@ import { route, bodyOf, HttpError } from "../../../../lib/http";
 import { requireUser } from "../../../../lib/auth";
 import { query, exec } from "../../../../lib/db";
 import { getGoogleAccessTokenForUser } from "../../../../lib/tokens";
-import {
-  createCalendarEvent,
-  patchCalendarEvent,
-  deleteCalendarEvent,
-} from "../../../../lib/google";
+import { executeAction } from "../../../../lib/actions";
 
 interface PendingActionRow {
   id: string;
   type: string;
   payload: unknown;
-}
-
-function asString(v: unknown, field: string): string {
-  if (typeof v !== "string" || !v) throw new HttpError(500, `Acción corrupta: falta ${field}`);
-  return v;
 }
 
 export default route(["POST"], async (req, res) => {
@@ -66,30 +57,7 @@ export default route(["POST"], async (req, res) => {
 
   try {
     const accessToken = await getGoogleAccessTokenForUser(userId);
-
-    switch (action.type) {
-      case "create":
-        await createCalendarEvent(accessToken, {
-          title: asString(payload.title, "title"),
-          start: asString(payload.start, "start"),
-          end: asString(payload.end, "end"),
-          timeZone: asString(payload.timeZone, "timeZone"),
-          location: typeof payload.location === "string" ? payload.location : undefined,
-        });
-        break;
-      case "reschedule":
-        await patchCalendarEvent(accessToken, asString(payload.eventId, "eventId"), {
-          start: asString(payload.start, "start"),
-          end: asString(payload.end, "end"),
-          timeZone: asString(payload.timeZone, "timeZone"),
-        });
-        break;
-      case "cancel":
-        await deleteCalendarEvent(accessToken, asString(payload.eventId, "eventId"));
-        break;
-      default:
-        throw new HttpError(500, `Tipo de acción desconocido: ${action.type}`);
-    }
+    await executeAction(accessToken, action.type, payload);
   } catch (err) {
     await exec("UPDATE pending_actions SET status = 'failed' WHERE id = ?", [action.id]);
     throw err;
