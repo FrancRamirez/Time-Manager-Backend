@@ -1,4 +1,5 @@
 import { localToUtcMs, utcMsToLocal } from "./schedule";
+import type { WhatsappBody } from "./whatsapp";
 
 // ---------------------------------------------------------------------------
 // Reloj del dispositivo (alarmas y temporizadores)
@@ -43,7 +44,8 @@ export type DeviceActionBody =
       old: { hour: number; minute: number; days: Day[]; label?: string };
       new: { hour: number; minute: number; days: Day[]; label?: string };
     }
-  | { kind: "timer_set"; seconds: number; label?: string };
+  | { kind: "timer_set"; seconds: number; label?: string }
+  | WhatsappBody;
 
 /** Acción que se manda a la app para ejecutarla en el dispositivo. */
 export type DeviceAction = DeviceActionBody & {

@@ -1,7 +1,12 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  /** `extra` se incluye tal cual en el JSON de la respuesta (ej. code, retryAfterSeconds). */
+  constructor(
+    public status: number,
+    message: string,
+    public extra?: Record<string, unknown>
+  ) {
     super(message);
     this.name = "HttpError";
   }
@@ -31,7 +36,9 @@ export function route(methods: string[], handler: Handler) {
       await handler(req, res);
     } catch (err) {
       if (err instanceof HttpError) {
-        res.status(err.status).json({ error: err.message });
+        const wait = err.extra?.retryAfterSeconds;
+        if (typeof wait === "number" && wait > 0) res.setHeader("Retry-After", String(Math.ceil(wait)));
+        res.status(err.status).json({ error: err.message, ...err.extra });
         return;
       }
       console.error(err);

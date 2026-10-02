@@ -79,8 +79,38 @@ export const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models
  */
 export function modelChain(): string[] {
   const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash";
-  return primary === fallback ? [primary] : [primary, fallback];
+  // Admite uno o varios modelos de respaldo separados por coma.
+  const fallbacks = (process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash")
+    .split(",")
+    .map((m) => m.trim())
+    .filter(Boolean);
+  return [...new Set([primary, ...fallbacks])];
+}
+
+/**
+ * Modelos cuya cuota DIARIA se agotó (429 "PerDay"): se saltean hasta que venza el
+ * retryDelay que informa Google. Vive en memoria de la instancia, es solo una
+ * optimización para no gastar tiempo en pedidos que van a fallar igual.
+ */
+const exhaustedUntil = new Map<string, number>();
+
+/**
+ * Segundos hasta que se pueda volver a usar la IA, SOLO si todos los modelos de la
+ * cadena están marcados como agotados (usa el retryDelay exacto que informó Google).
+ * null = no se sabe / hay algún modelo disponible.
+ */
+export function aiQuotaWaitSeconds(): number | null {
+  const now = Date.now();
+  const waits = modelChain().map((m) => (exhaustedUntil.get(m) ?? 0) - now);
+  if (waits.length === 0 || waits.some((w) => w <= 0)) return null;
+  return Math.ceil(Math.min(...waits) / 1000);
+}
+
+/** Si la respuesta es un 429 por cuota diaria, devuelve cuántos ms esperar; si no, null. */
+function dailyQuotaWaitMs(status: number, body: string): number | null {
+  if (status !== 429 || !/PerDay/i.test(body)) return null;
+  const m = /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(body);
+  return (m ? Number(m[1]) : 3600) * 1000;
 }
 
 const MAX_STEPS = 4; // vueltas máximas de function calling por mensaje
@@ -430,6 +460,7 @@ async function callGemini(
   deadline: number
 ): Promise<GeminiResponse> {
   const failures: string[] = [];
+  let quotaSkips = 0; // modelos descartados por cuota diaria agotada
   const level = thinkingLevel();
   let sendThinking = level !== null;
   const systemInstruction = { parts: [{ text: systemPrompt(tz, settings, viaVoice) }] };
@@ -440,6 +471,14 @@ async function callGemini(
     for (const model of modelChain()) {
       const remaining = deadline - Date.now();
       if (remaining < 1500) break;
+
+      if ((exhaustedUntil.get(model) ?? 0) > Date.now()) {
+        if (pass === 0) {
+          failures.push(`${model}: cuota diaria agotada (omitido)`);
+          quotaSkips++;
+        }
+        continue;
+      }
 
       // Hasta 2 intentos por modelo: el segundo solo si el API rechaza el parámetro de pensamiento.
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -477,7 +516,14 @@ async function callGemini(
           sendThinking = false;
           continue;
         }
-        // 404 = modelo dado de baja; 503 / 429 = sobrecarga o cuota: probar el siguiente / reintentar.
+        // 429 por cuota DIARIA: reintentar no sirve; se marca el modelo y se pasa al siguiente.
+        const waitMs = dailyQuotaWaitMs(res.status, body);
+        if (waitMs !== null) {
+          exhaustedUntil.set(model, Date.now() + waitMs);
+          quotaSkips++;
+          break;
+        }
+        // 404 = modelo dado de baja; 503 / 429 = sobrecarga o límite por minuto: probar el siguiente / reintentar.
         if (res.status === 503 || res.status === 429) retryable = true;
         if (res.status !== 404 && res.status !== 503 && res.status !== 429) {
           console.error("Gemini falló:", failures.join(" || "));
@@ -492,6 +538,14 @@ async function callGemini(
   }
 
   console.error("Gemini falló:", failures.join(" || ") || "sin tiempo restante");
+  const quotaWait = quotaSkips >= modelChain().length ? aiQuotaWaitSeconds() : null;
+  if (quotaWait !== null) {
+    throw new HttpError(
+      503,
+      "El asistente alcanzó su límite diario de uso de la IA. Vuelve a intentarlo más tarde.",
+      { code: "ai_quota", retryAfterSeconds: quotaWait }
+    );
+  }
   throw new HttpError(502, "El asistente no está disponible en este momento");
 }
 
