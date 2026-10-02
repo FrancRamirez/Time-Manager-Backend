@@ -70,14 +70,14 @@ export interface HistoryMessage {
 // Configuración
 // ---------------------------------------------------------------------------
 
-const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
+export const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
  * Los modelos 1.5 y 2.x ya no están disponibles para cuentas nuevas. El
  * modelo principal se puede cambiar con GEMINI_MODEL sin tocar código; si
  * responde 404/503 se prueba el de respaldo (GEMINI_FALLBACK_MODEL).
  */
-function modelChain(): string[] {
+export function modelChain(): string[] {
   const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
   const fallback = process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash";
   return primary === fallback ? [primary] : [primary, fallback];
@@ -135,7 +135,7 @@ const ALLOW_CONFLICTS_HELP =
   "Solo true si el usuario, ya informado de que el horario se superpone con otro evento o " +
   "no respeta el buffer, pidió explícitamente mantenerlo. Nunca permite usar franjas intocables.";
 
-const TOOLS = [
+export const TOOLS = [
   {
     functionDeclarations: [
       {
@@ -376,7 +376,7 @@ function nowInZone(tz: string) {
 // Prompt
 // ---------------------------------------------------------------------------
 
-function systemPrompt(tz: string, settings: AssistantSettings, viaVoice: boolean): string {
+export function systemPrompt(tz: string, settings: AssistantSettings, viaVoice: boolean): string {
   const { human } = nowInZone(tz);
   const autopilot = settings.autonomyLevel === "autopilot";
 
@@ -444,6 +444,7 @@ async function callGemini(
       // Hasta 2 intentos por modelo: el segundo solo si el API rechaza el parámetro de pensamiento.
       for (let attempt = 0; attempt < 2; attempt++) {
         let res: Response;
+        const t0 = Date.now();
         try {
           res = await fetch(`${API_BASE}/${model}:generateContent`, {
             method: "POST",
@@ -461,7 +462,7 @@ async function callGemini(
             signal: AbortSignal.timeout(Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now()))),
           });
         } catch (err) {
-          failures.push(`${model}: ${(err as Error).message}`);
+          failures.push(`${model}: ${(err as Error).message} (${Date.now() - t0} ms)`);
           retryable = true; // timeout o red: probar el siguiente modelo / otra vuelta
           break;
         }
@@ -469,7 +470,7 @@ async function callGemini(
         if (res.ok) return (await res.json()) as GeminiResponse;
 
         const body = await res.text().catch(() => "");
-        failures.push(`${model}: HTTP ${res.status} ${body}`);
+        failures.push(`${model}: HTTP ${res.status} (${Date.now() - t0} ms) ${body}`);
 
         // 400 por el parámetro de pensamiento: se reintenta sin él (y se deja de mandar).
         if (res.status === 400 && sendThinking && /think/i.test(body)) {
