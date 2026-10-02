@@ -111,6 +111,16 @@ function tzOffsetMs(utcMs: number, tz: string): number {
   return asUtc - Math.floor(utcMs / 1000) * 1000;
 }
 
+export function safeTimeZone(tz: string | undefined): string {
+  if (!tz) return "UTC";
+  try {
+    new Intl.DateTimeFormat("es", { timeZone: tz });
+    return tz;
+  } catch {
+    return "UTC";
+  }
+}
+
 /** "2026-10-01T15:45:00" interpretado en la zona tz -> milisegundos UTC. */
 export function localToUtcMs(naive: string, tz: string): number {
   const guess = Date.parse(naive + "Z");
@@ -128,19 +138,29 @@ export function utcMsToLocal(ms: number, tz: string): string {
 // Consulta de Calendar por ventana de tiempo
 // ---------------------------------------------------------------------------
 
-type CalEvent = GoogleCalendarEvent & { transparency?: string };
+/** Evento de Google Calendar con los campos extra que usa el motor de conflictos. */
+export type CalEvent = GoogleCalendarEvent & {
+  transparency?: string;
+  eventType?: string;
+  recurringEventId?: string;
+  guestsCanModify?: boolean;
+  locked?: boolean;
+  organizer?: { self?: boolean };
+  attendees?: { self?: boolean; responseStatus?: string }[];
+};
 
-async function listEventsBetween(
+export async function listEventsBetween(
   accessToken: string,
   fromMs: number,
-  toMs: number
+  toMs: number,
+  maxResults = 100
 ): Promise<CalEvent[]> {
   const url = new URL(`${CALENDAR_API}/calendars/primary/events`);
   url.searchParams.set("timeMin", new Date(fromMs).toISOString());
   url.searchParams.set("timeMax", new Date(toMs).toISOString());
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
-  url.searchParams.set("maxResults", "100");
+  url.searchParams.set("maxResults", String(maxResults));
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
@@ -172,7 +192,7 @@ export interface SlotCheck {
 
 const DAY_MS = 86_400_000;
 
-function blockedOverlaps(startNaive: string, endNaive: string, ranges: BlockedRange[]): string[] {
+export function blockedOverlaps(startNaive: string, endNaive: string, ranges: BlockedRange[]): string[] {
   if (!ranges.length) return [];
   // Todo en "reloj de pared": se compara como si fuera UTC, sin tocar offsets.
   const slotStart = Date.parse(startNaive + "Z");
@@ -201,6 +221,48 @@ function blockedOverlaps(startNaive: string, endNaive: string, ranges: BlockedRa
   return [...new Set(hits)];
 }
 
+/** Intervalo ocupado (milisegundos UTC). */
+export interface BusyBlock {
+  id: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Qué bloques ocupados impiden un horario: los que se superponen y los que
+ * quedan más cerca que el buffer. Función pura (sin red): la usan tanto la
+ * validación de un horario como la búsqueda de huecos del motor de conflictos.
+ */
+export function slotBlockers(
+  slotStart: number,
+  slotEnd: number,
+  busy: BusyBlock[],
+  bufferMs: number,
+  ignoreId?: string
+): { id: string; kind: "overlap" | "buffer" }[] {
+  const out: { id: string; kind: "overlap" | "buffer" }[] = [];
+  for (const b of busy) {
+    if (b.id === ignoreId) continue;
+    const overlaps = b.start < slotEnd && b.end > slotStart;
+    const tooClose = b.start < slotEnd + bufferMs && b.end > slotStart - bufferMs;
+    if (overlaps || tooClose) out.push({ id: b.id, kind: overlaps ? "overlap" : "buffer" });
+  }
+  return out;
+}
+
+/** "vie 2 oct, 15:45" en la zona del usuario. */
+export function formatWhen(ms: number, tz: string): string {
+  return new Intl.DateTimeFormat("es", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: tz,
+  }).format(new Date(ms));
+}
+
 export async function checkSlot(opts: {
   accessToken: string;
   start: string; // "YYYY-MM-DDTHH:mm:ss" local
@@ -219,28 +281,31 @@ export async function checkSlot(opts: {
   const slotEnd = localToUtcMs(end, tz);
   const events = await listEventsBetween(accessToken, slotStart - bufferMs, slotEnd + bufferMs);
 
-  const conflicts: SlotConflict[] = [];
+  const byId = new Map<string, { title: string; start: number; end: number }>();
+  const busy: BusyBlock[] = [];
   for (const e of events) {
-    if (e.id === ignoreEventId) continue;
     if (e.status === "cancelled") continue;
     if (e.transparency === "transparent") continue; // marcado como "disponible"
     // Los eventos de todo el día (feriados, cumpleaños) no bloquean horarios.
     if (!e.start.dateTime || !e.end.dateTime) continue;
-
     const evStart = Date.parse(e.start.dateTime);
     const evEnd = Date.parse(e.end.dateTime);
-    const overlaps = evStart < slotEnd && evEnd > slotStart;
-    const tooClose = evStart < slotEnd + bufferMs && evEnd > slotStart - bufferMs;
-    if (!overlaps && !tooClose) continue;
-
-    conflicts.push({
-      id: e.id,
-      title: e.summary ?? "(sin título)",
-      start: utcMsToLocal(evStart, tz),
-      end: utcMsToLocal(evEnd, tz),
-      kind: overlaps ? "overlap" : "buffer",
-    });
+    busy.push({ id: e.id, start: evStart, end: evEnd });
+    byId.set(e.id, { title: e.summary ?? "(sin título)", start: evStart, end: evEnd });
   }
+
+  const conflicts: SlotConflict[] = slotBlockers(slotStart, slotEnd, busy, bufferMs, ignoreEventId).map(
+    ({ id, kind }) => {
+      const ev = byId.get(id)!;
+      return {
+        id,
+        title: ev.title,
+        start: utcMsToLocal(ev.start, tz),
+        end: utcMsToLocal(ev.end, tz),
+        kind,
+      };
+    }
+  );
 
   return { blocked, conflicts };
 }

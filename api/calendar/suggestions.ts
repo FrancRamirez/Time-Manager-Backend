@@ -22,7 +22,12 @@ export default route(["GET"], async (req, res) => {
     [userId]
   );
 
-  const suggestions: RescheduleSuggestion[] = rows.map((r) => ({
+  // Si dos análisis simultáneos crearon la misma sugerencia, se muestra una sola
+  // (las filas vienen de la más nueva a la más vieja).
+  const seen = new Set<string>();
+  const unique = rows.filter((r) => !seen.has(r.event_id) && seen.add(r.event_id));
+
+  const suggestions: RescheduleSuggestion[] = unique.map((r) => ({
     eventId: r.event_id,
     currentSlot: { startsAt: r.current_starts_at, endsAt: r.current_ends_at },
     proposedSlot: { startsAt: r.proposed_starts_at, endsAt: r.proposed_ends_at },

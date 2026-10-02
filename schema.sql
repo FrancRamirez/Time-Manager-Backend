@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS suggestions (
   proposed_starts_at VARCHAR(40) NOT NULL,
   proposed_ends_at VARCHAR(40) NOT NULL,
   reason TEXT NOT NULL,
-  status VARCHAR(12) NOT NULL DEFAULT 'pending', -- pending | accepted | rejected
+  status VARCHAR(12) NOT NULL DEFAULT 'pending', -- pending | accepted | rejected | stale | auto_applied
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_suggestions_user_status (user_id, status)
 );
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS pending_actions (
   type VARCHAR(20) NOT NULL, -- create | reschedule | cancel
   description TEXT NOT NULL,
   payload JSON NOT NULL,
-  status VARCHAR(12) NOT NULL DEFAULT 'pending', -- pending | executed | rejected
+  status VARCHAR(12) NOT NULL DEFAULT 'pending', -- pending | executed | rejected | failed | auto_done
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_pending_user_status (user_id, status)
 );

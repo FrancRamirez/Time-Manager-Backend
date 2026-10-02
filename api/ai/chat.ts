@@ -38,6 +38,7 @@ export default route(["POST"], async (req, res) => {
     history: parseHistory(body.history),
     timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
     settings: parseSettings(body.settings),
+    viaVoice: body.viaVoice === true,
   });
   res.status(200).json(result);
 });
