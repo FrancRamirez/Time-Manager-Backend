@@ -82,6 +82,13 @@ export default route(["POST"], async (req, res) => {
 
   const tz = safeTimeZone(typeof body.timeZone === "string" ? body.timeZone : undefined);
   const settings = parseSettings(body.settings);
+  if (settings.appAccess.calendar !== "allowed") {
+    throw new HttpError(
+      403,
+      "Google Calendar está restringido para el asistente. Cámbialo en Ajustes > Restringir aplicaciones.",
+      { code: "app_restricted" }
+    );
+  }
   const accessToken = await getGoogleAccessTokenForUser(userId);
 
   // El evento pudo borrarse o cancelarse desde Calendar después de la sugerencia.

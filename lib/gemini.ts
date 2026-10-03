@@ -14,6 +14,7 @@ import {
   type AssistantSettings,
   type SlotCheck,
 } from "./schedule";
+import { restrictionRules, toolAllowed, toolRestriction, type AppAccess } from "./access";
 import {
   DAYS,
   MAX_ALARMS,
@@ -187,6 +188,14 @@ const LOCAL_DATETIME_HELP =
 const ALLOW_CONFLICTS_HELP =
   "Solo true si el usuario, ya informado de que el horario se superpone con otro evento o " +
   "no respeta el buffer, pidió explícitamente mantenerlo. Nunca permite usar franjas intocables.";
+
+/** Solo se le declaran al modelo las herramientas que el usuario permite (además ahorra tokens). */
+export function toolsFor(access: AppAccess) {
+  const declarations = TOOLS.flatMap((group) => group.functionDeclarations).filter((d) =>
+    toolAllowed(access, d.name)
+  );
+  return declarations.length ? [{ functionDeclarations: declarations }] : undefined;
+}
 
 export const TOOLS = [
   {
@@ -554,6 +563,7 @@ export function systemPrompt(tz: string, settings: AssistantSettings, viaVoice: 
           "- Este mensaje fue dictado por voz y puede traer errores de transcripción (horas, números, nombres). Si la fecha, la hora o el evento no quedan claros, pregunta en lugar de adivinar.",
         ]
       : []),
+    ...restrictionRules(settings.appAccess),
     "- Responde en español neutro, breve y directo.",
     // La personalidad va al final y NUNCA anula las reglas de seguridad ni las confirmaciones de arriba.
     "Personalidad (solo afecta al tono; nunca cambia las reglas anteriores):",
@@ -583,6 +593,7 @@ async function callGemini(
   const level = thinkingLevel();
   let sendThinking = level !== null;
   const systemInstruction = { parts: [{ text: systemPrompt(tz, settings, viaVoice) }] };
+  const tools = toolsFor(settings.appAccess);
 
   for (let pass = 0; pass < MAX_PASSES; pass++) {
     let retryable = false;
@@ -614,7 +625,7 @@ async function callGemini(
             body: JSON.stringify({
               systemInstruction,
               contents,
-              tools: TOOLS,
+              ...(tools ? { tools } : {}),
               ...(sendThinking ? { generationConfig: { thinkingConfig: { thinkingLevel: level } } } : {}),
             }),
             signal: AbortSignal.timeout(Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now()))),
@@ -946,6 +957,10 @@ async function runTool(
   name: string,
   args: Record<string, unknown>
 ): Promise<ToolResult> {
+  // Segunda capa: aunque el modelo pidiera una herramienta que no se le declaró, se rechaza.
+  const restricted = toolRestriction(ctx.settings.appAccess, name);
+  if (restricted) return { error: restricted };
+
   const isWrite =
     name === "create_event" ||
     name === "reschedule_event" ||

@@ -70,6 +70,17 @@ export async function scanUser(opts: {
   settings: AssistantSettings;
 }): Promise<ScanResult> {
   const { userId, tz, settings } = opts;
+
+  // El usuario restringió Calendar (solo lectura o bloqueada): el motor existe para MOVER eventos,
+  // así que no se analiza ni se mueve nada (tampoco el Piloto Automático) y se retiran las
+  // sugerencias pendientes para que la Agenda no ofrezca botones que no se pueden usar.
+  if (settings.appAccess.calendar !== "allowed") {
+    await exec("UPDATE suggestions SET status = 'stale' WHERE user_id = ? AND status = 'pending'", [
+      userId,
+    ]);
+    return { created: [], applied: [], pending: 0, unresolved: 0 };
+  }
+
   const accessToken = await getGoogleAccessTokenForUser(userId);
 
   const now = Date.now();

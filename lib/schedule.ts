@@ -1,5 +1,6 @@
 import { HttpError } from "./http";
 import type { GoogleCalendarEvent } from "./google";
+import { DEFAULT_APP_ACCESS, parseAppAccess, type AppAccess } from "./access";
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
@@ -20,6 +21,8 @@ export interface AssistantSettings {
   bufferMinutes: number;
   dailyActionLimit: number;
   blockedHours: BlockedRange[];
+  /** Qué puede tocar el asistente en cada app (Permitido / Solo lectura / Bloqueada). */
+  appAccess: AppAccess;
 }
 
 export const DEFAULT_SETTINGS: AssistantSettings = {
@@ -27,6 +30,7 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   bufferMinutes: 0,
   dailyActionLimit: 100,
   blockedHours: [],
+  appAccess: DEFAULT_APP_ACCESS,
 };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -69,6 +73,7 @@ export function parseSettings(raw: unknown): AssistantSettings {
     bufferMinutes: clampInt(r.bufferMinutes, 0, 240, 0),
     dailyActionLimit: clampInt(r.dailyActionLimit, 1, 500, 100),
     blockedHours,
+    appAccess: parseAppAccess(r.appAccess),
   };
 }
 

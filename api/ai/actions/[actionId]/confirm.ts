@@ -3,6 +3,8 @@ import { requireUser } from "../../../../lib/auth";
 import { query, exec } from "../../../../lib/db";
 import { getGoogleAccessTokenForUser } from "../../../../lib/tokens";
 import { executeAction } from "../../../../lib/actions";
+import { actionApp, appAllows, restrictionText } from "../../../../lib/access";
+import { parseSettings } from "../../../../lib/schedule";
 
 interface PendingActionRow {
   id: string;
@@ -38,6 +40,14 @@ export default route(["POST"], async (req, res) => {
     await exec("UPDATE pending_actions SET status = 'rejected' WHERE id = ?", [action.id]);
     res.status(200).json({ ok: true, executed: false });
     return;
+  }
+
+  // El usuario pudo restringir la app después de que se propuso la acción. La app manda sus
+  // ajustes al confirmar; la acción queda pendiente (vence a la hora) por si los vuelve a cambiar.
+  const access = parseSettings(body.settings).appAccess;
+  const app = actionApp(action.type);
+  if (app && !appAllows(access, app, true)) {
+    throw new HttpError(403, restrictionText(app, access[app]), { code: "app_restricted" });
   }
 
   // Se "reclama" la acción de forma atómica antes de ejecutarla, para que un
