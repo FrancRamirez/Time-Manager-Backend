@@ -24,7 +24,7 @@ export default route(["POST"], async (req, res) => {
     // refresh_token no podemos sincronizar su Calendar más adelante.
     throw new HttpError(
       409,
-      "Google no devolvió un refresh token. Revocá el acceso de la app en tu cuenta de Google y probá de nuevo."
+      "Google no devolvió un refresh token. Revoca el acceso de la app en tu cuenta de Google y prueba de nuevo."
     );
   }
 
