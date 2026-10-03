@@ -47,10 +47,18 @@ CREATE TABLE IF NOT EXISTS suggestions (
 CREATE TABLE IF NOT EXISTS pending_actions (
   id CHAR(36) NOT NULL PRIMARY KEY,
   user_id CHAR(36) NOT NULL,
-  type VARCHAR(20) NOT NULL, -- create | reschedule | cancel
+  type VARCHAR(20) NOT NULL, -- create | reschedule | cancel | email_draft | email_send | email_modify | email_trash
   description TEXT NOT NULL,
   payload JSON NOT NULL,
   status VARCHAR(12) NOT NULL DEFAULT 'pending', -- pending | executed | rejected | failed | auto_done
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   KEY idx_pending_user_status (user_id, status)
+);
+
+-- Contador diario de mensajes de IA por usuario (día en hora del Pacífico).
+CREATE TABLE IF NOT EXISTS ai_usage (
+  user_id CHAR(36) NOT NULL,
+  usage_date DATE NOT NULL,
+  messages INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, usage_date)
 );

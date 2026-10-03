@@ -3,6 +3,7 @@ import { requireUser } from "../../lib/auth";
 import { sendMessageToGemini, type HistoryMessage } from "../../lib/gemini";
 import { parseSettings } from "../../lib/schedule";
 import { parseAlarms } from "../../lib/clock";
+import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../lib/usage";
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY = 12;
@@ -33,6 +34,24 @@ export default route(["POST"], async (req, res) => {
     throw new HttpError(400, "El mensaje es demasiado largo");
   }
 
+  // Cupo diario propio. Si la base de datos de uso falla, el chat sigue funcionando sin contador.
+  let used: number | null = null;
+  try {
+    used = await messagesUsedToday(userId);
+  } catch (err) {
+    console.error("No se pudo leer ai_usage (¿falta ejecutar schema.sql?):", err);
+  }
+  if (used !== null) {
+    const usage = snapshot(used);
+    if (usage.limit > 0 && usage.used >= usage.limit) {
+      throw new HttpError(429, "Llegaste al límite de mensajes de hoy.", {
+        code: "user_limit",
+        retryAfterSeconds: usage.resetsInSeconds,
+        usage,
+      });
+    }
+  }
+
   const result = await sendMessageToGemini({
     userId,
     message: body.message,
@@ -42,5 +61,15 @@ export default route(["POST"], async (req, res) => {
     viaVoice: body.viaVoice === true,
     alarms: parseAlarms(body.alarms),
   });
-  res.status(200).json(result);
+
+  // Solo se descuenta el mensaje si Gemini respondió (un error no le cuesta nada al usuario).
+  let usage: UsageSnapshot | undefined;
+  if (used !== null) {
+    try {
+      usage = snapshot(await recordMessage(userId));
+    } catch (err) {
+      console.error("No se pudo actualizar ai_usage:", err);
+    }
+  }
+  res.status(200).json({ ...result, usage });
 });
