@@ -92,7 +92,23 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
   });
 
   if (!res.ok) {
-    throw new HttpError(401, "El refresh token de Google dejó de ser válido");
+    const detail = await res.text().catch(() => "");
+    let googleError: unknown;
+    try {
+      googleError = (JSON.parse(detail) as { error?: unknown }).error;
+    } catch {
+      /* el cuerpo no era JSON */
+    }
+    // invalid_grant = el refresh token caducó (7 días en modo Testing) o el usuario revocó el acceso.
+    // Solo ese caso obliga a volver a iniciar sesión; cualquier otro fallo de Google es transitorio o
+    // de configuración y NO debe cerrar la sesión del usuario.
+    if (googleError === "invalid_grant") {
+      throw new HttpError(401, "Tu conexión con Google venció. Vuelve a iniciar sesión.", {
+        code: "google_reauth",
+      });
+    }
+    console.error("Google refresh falló:", res.status, detail);
+    throw new HttpError(502, "No se pudo renovar el acceso a Google");
   }
   const data = (await res.json()) as GoogleTokenResponse;
   return data.access_token;

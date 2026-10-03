@@ -1384,6 +1384,8 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
       try {
         response = await runTool(ctx, name, args ?? {});
       } catch (err) {
+        // Si Google invalidó la sesión no tiene sentido que el modelo "improvise": se corta y la app pide login.
+        if (err instanceof HttpError && err.extra?.code === "google_reauth") throw err;
         console.error(`Herramienta ${name} falló:`, err);
         response = {
           error:
