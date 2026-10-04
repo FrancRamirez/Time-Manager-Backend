@@ -9,7 +9,7 @@
 // confirmar acciones lo revisan por su cuenta.
 
 export type AccessLevel = "allowed" | "read_only" | "blocked";
-export type AppId = "calendar" | "gmail" | "clock" | "whatsapp";
+export type AppId = "calendar" | "gmail" | "clock" | "whatsapp" | "sms" | "calls" | "forecast";
 export type AppAccess = Record<AppId, AccessLevel>;
 
 export const DEFAULT_APP_ACCESS: AppAccess = {
@@ -17,6 +17,9 @@ export const DEFAULT_APP_ACCESS: AppAccess = {
   gmail: "allowed",
   clock: "allowed",
   whatsapp: "allowed",
+  sms: "allowed",
+  calls: "allowed",
+  forecast: "allowed",
 };
 
 /** Niveles válidos por app: "Solo lectura" existe únicamente donde hay lectura Y escritura. */
@@ -25,6 +28,9 @@ export const APP_LEVELS: Record<AppId, AccessLevel[]> = {
   gmail: ["allowed", "read_only", "blocked"],
   clock: ["allowed", "read_only", "blocked"],
   whatsapp: ["allowed", "blocked"],
+  sms: ["allowed", "blocked"],
+  calls: ["allowed", "blocked"],
+  forecast: ["allowed", "blocked"],
 };
 
 export const APP_NAMES: Record<AppId, string> = {
@@ -32,6 +38,9 @@ export const APP_NAMES: Record<AppId, string> = {
   gmail: "Gmail",
   clock: "Reloj",
   whatsapp: "WhatsApp",
+  sms: "SMS",
+  calls: "Llamadas",
+  forecast: "Pronóstico",
 };
 
 /** A qué app pertenece cada herramienta y si escribe (crea, cambia, envía o borra). */
@@ -52,6 +61,9 @@ const TOOL_APP: Record<string, { app: AppId; write: boolean }> = {
   cancel_alarm: { app: "clock", write: true },
   set_timer: { app: "clock", write: true },
   compose_whatsapp: { app: "whatsapp", write: true },
+  compose_sms: { app: "sms", write: true },
+  compose_call: { app: "calls", write: true },
+  get_forecast: { app: "forecast", write: false },
 };
 
 /** Tipo de acción pendiente (pending_actions.type) -> app que toca. */

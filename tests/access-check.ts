@@ -6,9 +6,11 @@ let fails = 0;
 const ok = (c: boolean, m: string) => { if (!c) { fails++; console.log("FALLA:", m); } };
 const names = TOOLS.flatMap((g) => g.functionDeclarations).map((d) => d.name);
 console.log("herramientas declaradas:", names.length);
+// Con TODO permitido deben declararse todas: una herramienta sin mapear quedaría permitida y la restricción no se aplicaría.
+ok(names.every((n) => toolRestriction({ calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked" }, n) !== null), "toda herramienta declarada debe estar mapeada a una app");
 
 // 1. Ninguna herramienta declarada puede escaparse del mapa: con todo bloqueado no debe quedar ninguna.
-const allBlocked = { calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked" } as const;
+const allBlocked = { calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked" } as const;
 const left = (toolsFor(allBlocked)?.[0].functionDeclarations ?? []).map((d) => d.name);
 ok(left.length === 0, `con todo bloqueado quedan herramientas sin mapear: ${left.join(", ")}`);
 ok(toolsFor(allBlocked) === undefined, "con todo bloqueado no debe mandarse el campo tools");
@@ -17,10 +19,10 @@ ok(toolsFor(allBlocked) === undefined, "con todo bloqueado no debe mandarse el c
 ok(toolsFor(DEFAULT_APP_ACCESS)![0].functionDeclarations.length === names.length, "por defecto deben declararse todas");
 
 // 3. Solo lectura: quedan solo las de lectura.
-const ro = { calendar: "read_only", gmail: "read_only", clock: "read_only", whatsapp: "allowed" } as const;
+const ro = { calendar: "read_only", gmail: "read_only", clock: "read_only", whatsapp: "allowed", sms: "allowed", calls: "allowed", forecast: "allowed" } as const;
 const roNames = toolsFor(ro)![0].functionDeclarations.map((d) => d.name).sort();
 console.log("solo lectura ->", roNames.join(", "));
-const expectRO = ["list_events","search_emails","read_email","list_alarms","compose_whatsapp"].sort();
+const expectRO = ["list_events","search_emails","read_email","list_alarms","compose_whatsapp","compose_sms","compose_call","get_forecast"].sort();
 ok(JSON.stringify(roNames) === JSON.stringify(expectRO), "solo lectura debe dejar exactamente las herramientas de lectura (+WhatsApp permitido)");
 
 // 4. Cada nivel por app, de forma aislada.
@@ -35,6 +37,11 @@ for (const [app, writes, reads] of [
   reads.forEach((t) => { ok(toolAllowed(ro1, t), `${t} debe permitirse en solo lectura`); ok(!toolAllowed(bl1, t), `${t} debe bloquearse`); });
 }
 ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, whatsapp: "blocked" }, "compose_whatsapp"), "WhatsApp bloqueada");
+ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, sms: "blocked" }, "compose_sms") && toolAllowed({ ...DEFAULT_APP_ACCESS, sms: "blocked" }, "compose_call"), "SMS bloqueada no afecta a Llamadas");
+ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, calls: "blocked" }, "compose_call") && toolAllowed({ ...DEFAULT_APP_ACCESS, calls: "blocked" }, "compose_sms"), "Llamadas bloqueada no afecta a SMS");
+ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, forecast: "blocked" }, "get_forecast"), "Pronóstico bloqueado");
+ok(toolAllowed(DEFAULT_APP_ACCESS, "get_forecast"), "Pronóstico permitido por defecto");
+ok(parseAppAccess({ forecast: "read_only" }).forecast === "blocked", "forecast no admite solo lectura (inválido = bloqueado)");
 
 // 5. Validación del cliente: ausente = permitido; inválido = bloqueado (más seguro); WhatsApp no admite solo lectura.
 ok(parseAppAccess(undefined).calendar === "allowed", "sin appAccess = permitido");

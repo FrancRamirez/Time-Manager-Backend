@@ -3,6 +3,7 @@ import { requireUser } from "../../lib/auth";
 import { sendMessageToGemini, type HistoryMessage } from "../../lib/gemini";
 import { parseSettings } from "../../lib/schedule";
 import { parseAlarms } from "../../lib/clock";
+import { parseLocation } from "../../lib/weather";
 import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../lib/usage";
 
 const MAX_MESSAGE_CHARS = 2000;
@@ -60,7 +61,16 @@ export default route(["POST"], async (req, res) => {
     settings: parseSettings(body.settings),
     viaVoice: body.viaVoice === true,
     alarms: parseAlarms(body.alarms),
+    location: parseLocation(body.location),
+    locationUnavailable: body.locationUnavailable === true,
   });
+
+  // Falta la ubicación para el pronóstico: no hubo respuesta para el usuario, así que no cuenta como
+  // mensaje. La app obtiene la ubicación y reenvía el mismo mensaje.
+  if (result.locationRequest) {
+    res.status(200).json({ locationRequest: true, reply: result.reply });
+    return;
+  }
 
   // Solo se descuenta el mensaje si Gemini respondió (un error no le cuesta nada al usuario).
   let usage: UsageSnapshot | undefined;
