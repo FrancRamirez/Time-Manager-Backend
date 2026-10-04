@@ -1,0 +1,30 @@
+# Planificador gratuito del barrido de agenda (IDEA 4A).
+# Vercel Hobby solo permite un cron por día, así que se llama al endpoint desde aquí.
+#
+# Secretos del repositorio (Settings > Secrets and variables > Actions):
+#   SCAN_URL     -> https://TU-PROYECTO.vercel.app/api/cron/scan
+#   CRON_SECRET  -> el mismo valor que la variable CRON_SECRET en Vercel
+#
+# Límites conocidos de GitHub Actions: los trabajos programados pueden retrasarse varios minutos en
+# horas de mucha carga, y en repositorios públicos se desactivan tras 60 días sin actividad.
+# Si eso importa, usa cron-job.org con la misma URL y la cabecera Authorization (ver docs/SCHEDULER.md).
+name: Barrido de agenda
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Llamar al endpoint de barrido
+        env:
+          SCAN_URL: ${{ secrets.SCAN_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          test -n "$SCAN_URL" && test -n "$CRON_SECRET" || { echo "Faltan los secretos SCAN_URL y CRON_SECRET"; exit 1; }
+          curl --fail-with-body --silent --show-error --max-time 60 \
+            -X POST -H "Authorization: Bearer $CRON_SECRET" "$SCAN_URL"

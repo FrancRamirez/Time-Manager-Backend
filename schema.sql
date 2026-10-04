@@ -1,4 +1,4 @@
--- Pegá y ejecutá todo este script en el SQL Editor de TiDB Cloud.
+-- Pega y ejecuta todo este script en el SQL Editor de TiDB Cloud.
 
 CREATE DATABASE IF NOT EXISTS time_manager;
 USE time_manager;
@@ -61,4 +61,17 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   usage_date DATE NOT NULL,
   messages INT NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, usage_date)
+);
+
+-- Copia de los ajustes del asistente (IDEA 4A): la app los sincroniza al cambiarlos para que el
+-- servidor pueda analizar la agenda y avisar por push aunque la app esté cerrada.
+-- (Si ya tienes la base creada, ejecuta solo este bloque.)
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id CHAR(36) NOT NULL PRIMARY KEY,
+  settings JSON NOT NULL,
+  time_zone VARCHAR(64) NOT NULL DEFAULT 'UTC',
+  -- último análisis automático (el barrido atiende primero a quien lleva más tiempo sin análisis)
+  last_scan_at TIMESTAMP NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  KEY idx_user_settings_last_scan (last_scan_at)
 );
