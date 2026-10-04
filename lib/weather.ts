@@ -10,6 +10,7 @@
 // y no se guardan ni se registran en logs.
 
 import { HttpError } from "./http";
+import { tfetch } from "./timing";
 
 /**
  * Con OPEN_METEO_API_KEY (plan de pago, obligatorio para uso comercial) se usan los servidores
@@ -77,7 +78,7 @@ export function describeWeatherCode(code: unknown): string {
 async function getJson(url: URL, what: string): Promise<unknown> {
   let res: Response;
   try {
-    res = await fetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await tfetch(url, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (err) {
     console.error(`${what}: sin respuesta`, (err as Error).message);
     throw new HttpError(502, "No se pudo consultar el servicio del clima. Intenta de nuevo en un momento.");

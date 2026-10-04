@@ -1,4 +1,5 @@
 import { HttpError } from "./http";
+import { tfetch } from "./timing";
 import { utcMsToLocal } from "./schedule";
 
 // ---------------------------------------------------------------------------
@@ -50,7 +51,7 @@ async function gmail<T>(
 ): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}${path}`, {
+    res = await tfetch(`${BASE}${path}`, {
       method: init.method ?? "GET",
       headers: {
         Authorization: `Bearer ${token}`,

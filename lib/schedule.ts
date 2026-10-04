@@ -1,4 +1,5 @@
 import { HttpError } from "./http";
+import { tfetch } from "./timing";
 import type { GoogleCalendarEvent } from "./google";
 import { DEFAULT_APP_ACCESS, parseAppAccess, type AppAccess } from "./access";
 
@@ -144,6 +145,15 @@ export function utcMsToLocal(ms: number, tz: string): string {
 // ---------------------------------------------------------------------------
 
 /** Evento de Google Calendar con los campos extra que usa el motor de conflictos. */
+/**
+ * Campos que usan el análisis de conflictos y la validación de horarios (ver CalEvent). Los invitados
+ * solo se piden con `self` y `responseStatus`: no se descargan correos ni nombres.
+ */
+export const WINDOW_FIELDS =
+  "items(id,summary,location,status,start(dateTime,date),end(dateTime,date)," +
+  "transparency,eventType,recurringEventId,guestsCanModify,locked,organizer(self)," +
+  "attendees(self,responseStatus))";
+
 export type CalEvent = GoogleCalendarEvent & {
   transparency?: string;
   eventType?: string;
@@ -166,8 +176,9 @@ export async function listEventsBetween(
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", String(maxResults));
+  url.searchParams.set("fields", WINDOW_FIELDS);
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await tfetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
     console.error("Calendar window falló:", res.status, await res.text().catch(() => ""));
     throw new HttpError(502, "No se pudo consultar Google Calendar");

@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { SignJWT, importPKCS8 } from "jose";
+import { tfetch } from "./timing";
 
 interface ServiceAccount {
   project_id: string;
@@ -50,7 +51,7 @@ async function getAccessToken(sa: ServiceAccount): Promise<string> {
     .setExpirationTime("1h")
     .sign(key);
 
-  const res = await fetch(TOKEN_URL, {
+  const res = await tfetch(TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -79,7 +80,7 @@ export async function sendPush(
 ): Promise<PushOutcome> {
   try {
     const accessToken = await getAccessToken(sa);
-    const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+    const res = await tfetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({

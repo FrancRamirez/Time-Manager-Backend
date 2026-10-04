@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { tfetch } from "./timing";
 import { HttpError } from "./http";
 import { exec, query } from "./db";
 import { getGoogleAccessTokenForUser } from "./tokens";
@@ -711,7 +712,7 @@ async function callGemini(
         let res: Response;
         const t0 = Date.now();
         try {
-          res = await fetch(`${API_BASE}/${model}:generateContent`, {
+          res = await tfetch(`${API_BASE}/${model}:generateContent`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

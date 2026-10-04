@@ -1,4 +1,5 @@
 import { HttpError, env } from "./http";
+import { tfetch } from "./timing";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const GOOGLE_TOKENINFO_URL = "https://oauth2.googleapis.com/tokeninfo";
@@ -25,7 +26,7 @@ interface GoogleTokenResponse {
  * una librería de verificación de JWT/JWKS completa para esto.
  */
 export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdentity> {
-  const res = await fetch(`${GOOGLE_TOKENINFO_URL}?id_token=${encodeURIComponent(idToken)}`);
+  const res = await tfetch(`${GOOGLE_TOKENINFO_URL}?id_token=${encodeURIComponent(idToken)}`);
   if (!res.ok) {
     throw new HttpError(401, "idToken de Google inválido");
   }
@@ -58,7 +59,7 @@ export async function verifyGoogleIdToken(idToken: string): Promise<GoogleIdenti
  * refresh_token real de Google, con los scopes de Calendar/Gmail.
  */
 export async function exchangeAuthCode(serverAuthCode: string): Promise<GoogleTokenResponse> {
-  const res = await fetch(GOOGLE_TOKEN_URL, {
+  const res = await tfetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -80,7 +81,14 @@ export async function exchangeAuthCode(serverAuthCode: string): Promise<GoogleTo
 
 /** Pide un access_token nuevo a partir del refresh_token guardado. */
 export async function refreshAccessToken(refreshToken: string): Promise<string> {
-  const res = await fetch(GOOGLE_TOKEN_URL, {
+  return (await refreshAccessTokenWithExpiry(refreshToken)).accessToken;
+}
+
+/** Igual que refreshAccessToken, pero también devuelve cuántos segundos dura el token (para guardarlo). */
+export async function refreshAccessTokenWithExpiry(
+  refreshToken: string
+): Promise<{ accessToken: string; expiresInSec: number }> {
+  const res = await tfetch(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -111,8 +119,15 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     throw new HttpError(502, "No se pudo renovar el acceso a Google");
   }
   const data = (await res.json()) as GoogleTokenResponse;
-  return data.access_token;
+  return { accessToken: data.access_token, expiresInSec: Number(data.expires_in) || 3600 };
 }
+
+/**
+ * Campos que el código usa de cada evento (ver GoogleCalendarEvent). Con `fields` Google no manda
+ * descripciones, invitados completos, datos de videollamada, etc.: la respuesta pesa mucho menos.
+ * Si se empieza a leer otra propiedad de un evento, hay que agregarla aquí (hay una prueba que lo vigila).
+ */
+export const LIST_FIELDS = "items(id,summary,location,status,start(dateTime,date),end(dateTime,date))";
 
 export interface GoogleCalendarEvent {
   id: string;
@@ -133,8 +148,9 @@ export async function listUpcomingEvents(accessToken: string, daysAhead: number)
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", "50");
+  url.searchParams.set("fields", LIST_FIELDS);
 
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const res = await tfetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
     console.error("Calendar list falló:", res.status, detail);
@@ -145,7 +161,7 @@ export async function listUpcomingEvents(accessToken: string, daysAhead: number)
 }
 
 export async function deleteCalendarEvent(accessToken: string, eventId: string) {
-  const res = await fetch(`${CALENDAR_API}/calendars/primary/events/${eventId}`, {
+  const res = await tfetch(`${CALENDAR_API}/calendars/primary/events/${eventId}`, {
     method: "DELETE",
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -178,7 +194,7 @@ export async function getCalendarEvent(
   accessToken: string,
   eventId: string
 ): Promise<GoogleCalendarEvent | null> {
-  const res = await fetch(
+  const res = await tfetch(
     `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
@@ -194,7 +210,7 @@ export async function createCalendarEvent(
   accessToken: string,
   input: CalendarEventInput
 ): Promise<GoogleCalendarEvent> {
-  const res = await fetch(`${CALENDAR_API}/calendars/primary/events`, {
+  const res = await tfetch(`${CALENDAR_API}/calendars/primary/events`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(toGoogleEventBody(input)),
@@ -211,7 +227,7 @@ export async function patchCalendarEvent(
   eventId: string,
   input: CalendarEventInput
 ): Promise<GoogleCalendarEvent> {
-  const res = await fetch(
+  const res = await tfetch(
     `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",

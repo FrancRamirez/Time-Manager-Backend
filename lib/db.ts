@@ -1,5 +1,6 @@
 import { createPool, type Pool } from "mysql2/promise";
 import type { ResultSetHeader } from "mysql2";
+import { timed } from "./timing";
 
 let pool: Pool | undefined;
 
@@ -23,12 +24,12 @@ function getPool(): Pool {
 
 /** SELECT: devuelve las filas tipadas. */
 export async function query<T>(sql: string, params: unknown[] = []): Promise<T[]> {
-  const [rows] = await getPool().query(sql, params);
+  const [rows] = await timed("db", () => getPool().query(sql, params));
   return rows as T[];
 }
 
 /** INSERT / UPDATE / DELETE. */
 export async function exec(sql: string, params: unknown[] = []): Promise<ResultSetHeader> {
-  const [result] = await getPool().query<ResultSetHeader>(sql, params);
+  const [result] = await timed("db", () => getPool().query<ResultSetHeader>(sql, params));
   return result;
 }
