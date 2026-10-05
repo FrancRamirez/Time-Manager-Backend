@@ -1,10 +1,10 @@
-import { route, bodyOf, HttpError } from "../../../../lib/http";
-import { requireUser } from "../../../../lib/auth";
-import { query, exec } from "../../../../lib/db";
-import { getGoogleAccessTokenForUser } from "../../../../lib/tokens";
-import { executeAction } from "../../../../lib/actions";
-import { actionApp, appAllows, restrictionText } from "../../../../lib/access";
-import { parseSettings } from "../../../../lib/schedule";
+import { route, bodyOf, HttpError } from "../../http";
+import { requireUser } from "../../auth";
+import { query, exec } from "../../db";
+import { getGoogleAccessTokenForUser } from "../../tokens";
+import { executeAction } from "../../actions";
+import { actionApp, appAllows, restrictionText } from "../../access";
+import { parseSettings } from "../../schedule";
 
 interface PendingActionRow {
   id: string;

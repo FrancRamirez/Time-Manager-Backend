@@ -1,7 +1,7 @@
-import { route, bodyOf, HttpError } from "../../../lib/http";
-import { requireUser } from "../../../lib/auth";
-import { getGoogleAccessTokenForUser } from "../../../lib/tokens";
-import { deleteCalendarEvent } from "../../../lib/google";
+import { route, bodyOf, HttpError } from "../../http";
+import { requireUser } from "../../auth";
+import { getGoogleAccessTokenForUser } from "../../tokens";
+import { deleteCalendarEvent } from "../../google";
 
 export default route(["DELETE"], async (req, res) => {
   const userId = await requireUser(req);

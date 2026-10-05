@@ -1,8 +1,8 @@
-import { route } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { getGoogleAccessTokenForUser } from "../../lib/tokens";
-import { listUpcomingEvents, type GoogleCalendarEvent } from "../../lib/google";
-import type { CalendarEvent } from "../../lib/types";
+import { route } from "../../http";
+import { requireUser } from "../../auth";
+import { getGoogleAccessTokenForUser } from "../../tokens";
+import { listUpcomingEvents, type GoogleCalendarEvent } from "../../google";
+import type { CalendarEvent } from "../../types";
 
 function toApiEvent(e: GoogleCalendarEvent): CalendarEvent {
   return {

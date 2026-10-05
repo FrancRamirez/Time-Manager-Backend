@@ -1,7 +1,7 @@
-import { route } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { aiQuotaWaitSeconds } from "../../lib/gemini";
-import { messagesUsedToday, snapshot } from "../../lib/usage";
+import { route } from "../../http";
+import { requireUser } from "../../auth";
+import { aiQuotaWaitSeconds } from "../../gemini";
+import { messagesUsedToday, snapshot } from "../../usage";
 
 /** GET /api/ai/usage: mensajes de IA usados hoy y, si Google ya agotó su cuota, cuánto esperar. */
 export default route(["GET"], async (req, res) => {

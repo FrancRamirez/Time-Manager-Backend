@@ -1,7 +1,7 @@
-import { route, bodyOf } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { parseSettings, safeTimeZone } from "../../lib/schedule";
-import { scanUser } from "../../lib/scan";
+import { route, bodyOf } from "../../http";
+import { requireUser } from "../../auth";
+import { parseSettings, safeTimeZone } from "../../schedule";
+import { scanUser } from "../../scan";
 
 /**
  * Analiza la agenda del usuario en busca de conflictos y genera sugerencias.

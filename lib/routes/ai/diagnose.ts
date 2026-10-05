@@ -1,6 +1,6 @@
-import { route, HttpError } from "../../lib/http";
-import { API_BASE, TOOLS, modelChain, systemPrompt } from "../../lib/gemini";
-import { DEFAULT_SETTINGS } from "../../lib/schedule";
+import { route, HttpError } from "../../http";
+import { API_BASE, TOOLS, modelChain, systemPrompt } from "../../gemini";
+import { DEFAULT_SETTINGS } from "../../schedule";
 
 /**
  * DIAGNÓSTICO TEMPORAL. Mide desde Vercel cuánto tarda Gemini con distintas

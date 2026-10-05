@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { route, bodyOf, HttpError } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { exec } from "../../lib/db";
+import { route, bodyOf, HttpError } from "../../http";
+import { requireUser } from "../../auth";
+import { exec } from "../../db";
 
 export default route(["POST"], async (req, res) => {
   const userId = await requireUser(req);

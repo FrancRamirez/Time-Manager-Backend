@@ -1,10 +1,10 @@
-import { route, bodyOf, HttpError } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { sendMessageToGemini, type HistoryMessage } from "../../lib/gemini";
-import { parseSettings } from "../../lib/schedule";
-import { parseAlarms } from "../../lib/clock";
-import { parseLocation, parseLocationReason } from "../../lib/weather";
-import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../lib/usage";
+import { route, bodyOf, HttpError } from "../../http";
+import { requireUser } from "../../auth";
+import { sendMessageToGemini, type HistoryMessage } from "../../gemini";
+import { parseSettings } from "../../schedule";
+import { parseAlarms } from "../../clock";
+import { parseLocation, parseLocationReason } from "../../weather";
+import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../usage";
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY = 12;

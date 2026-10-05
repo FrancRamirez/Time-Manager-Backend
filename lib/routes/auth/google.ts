@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { route, bodyOf, HttpError } from "../../lib/http";
-import { query, exec } from "../../lib/db";
-import { encrypt } from "../../lib/crypto";
-import { signAccessToken, signRefreshToken } from "../../lib/auth";
-import { verifyGoogleIdToken, exchangeAuthCode } from "../../lib/google";
-import { toApiUser, type UserRow } from "../../lib/users";
+import { route, bodyOf, HttpError } from "../../http";
+import { query, exec } from "../../db";
+import { encrypt } from "../../crypto";
+import { signAccessToken, signRefreshToken } from "../../auth";
+import { verifyGoogleIdToken, exchangeAuthCode } from "../../google";
+import { toApiUser, type UserRow } from "../../users";
 
 export default route(["POST"], async (req, res) => {
   const body = bodyOf(req);

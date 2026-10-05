@@ -1,7 +1,7 @@
-import { route } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { query } from "../../lib/db";
-import type { RescheduleSuggestion } from "../../lib/types";
+import { route } from "../../http";
+import { requireUser } from "../../auth";
+import { query } from "../../db";
+import type { RescheduleSuggestion } from "../../types";
 
 interface SuggestionRow {
   event_id: string;

@@ -1,7 +1,7 @@
-import { route, HttpError } from "../../lib/http";
-import { requireUser } from "../../lib/auth";
-import { query } from "../../lib/db";
-import { toApiUser, type UserRow } from "../../lib/users";
+import { route, HttpError } from "../../http";
+import { requireUser } from "../../auth";
+import { query } from "../../db";
+import { toApiUser, type UserRow } from "../../users";
 
 /** Devuelve el usuario de la sesión (la app lo usa al arrancar para no pasar por el Login). */
 export default route(["GET"], async (req, res) => {

@@ -1,15 +1,15 @@
-import { route, bodyOf, HttpError } from "../../../lib/http";
-import { requireUser } from "../../../lib/auth";
-import { query, exec } from "../../../lib/db";
-import { getGoogleAccessTokenForUser } from "../../../lib/tokens";
-import { getCalendarEvent, patchCalendarEvent } from "../../../lib/google";
+import { route, bodyOf, HttpError } from "../../http";
+import { requireUser } from "../../auth";
+import { query, exec } from "../../db";
+import { getGoogleAccessTokenForUser } from "../../tokens";
+import { getCalendarEvent, patchCalendarEvent } from "../../google";
 import {
   checkSlot,
   parseSettings,
   safeTimeZone,
   utcMsToLocal,
   type SlotCheck,
-} from "../../../lib/schedule";
+} from "../../schedule";
 
 interface SuggestionRow {
   id: string;

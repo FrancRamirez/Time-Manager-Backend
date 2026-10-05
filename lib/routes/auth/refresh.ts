@@ -1,7 +1,7 @@
-import { route, bodyOf, HttpError } from "../../lib/http";
-import { query } from "../../lib/db";
-import { signAccessToken, verifyTokenFull } from "../../lib/auth";
-import { toApiUser, type UserRow } from "../../lib/users";
+import { route, bodyOf, HttpError } from "../../http";
+import { query } from "../../db";
+import { signAccessToken, verifyTokenFull } from "../../auth";
+import { toApiUser, type UserRow } from "../../users";
 
 /**
  * Renueva el accessToken con el refreshToken propio. No emite un refresh nuevo y el access nuevo

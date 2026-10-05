@@ -125,7 +125,7 @@ export function normalizeRoute(rawUrl: string | undefined): string {
   const path = (rawUrl ?? "").split("?")[0] || "/";
   return path
     .split("/")
-    .map((seg) => (/^[A-Za-z0-9_-]{16,}$/.test(seg) || /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(seg) ? ":id" : seg))
+    .map((seg) => ((/^[A-Za-z0-9_-]{16,}$/.test(seg) && /\d/.test(seg)) || /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(seg) ? ":id" : seg))
     .join("/");
 }
 
