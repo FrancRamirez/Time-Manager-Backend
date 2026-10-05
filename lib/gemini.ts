@@ -1734,7 +1734,19 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
   let finalText = "";
 
   for (let step = 0; step < MAX_STEPS; step++) {
-    const data = await callGemini(apiKey, contents, tz, settings, input.viaVoice === true, deadline);
+    let data: GeminiResponse;
+    try {
+      data = await callGemini(apiKey, contents, tz, settings, input.viaVoice === true, deadline);
+    } catch (err) {
+      // La acción ya quedó propuesta o aplicada en una vuelta anterior y solo falló la redacción de
+      // la respuesta. Tirar un error acá le haría creer al usuario que no pasó nada (y en Piloto
+      // Automático, repetir el pedido duplicaría el evento): se responde con el texto del servidor.
+      if (ctx.pending || ctx.executed || ctx.device) {
+        console.error("La IA falló al redactar la respuesta; se usa el texto del servidor:", err);
+        break;
+      }
+      throw err;
+    }
     const content = data.candidates?.[0]?.content;
 
     if (!content?.parts?.length) {

@@ -161,12 +161,15 @@ export async function listUpcomingEvents(accessToken: string, daysAhead: number)
 }
 
 export async function deleteCalendarEvent(accessToken: string, eventId: string) {
-  const res = await tfetch(`${CALENDAR_API}/calendars/primary/events/${eventId}`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const res = await calendarCall(
+    "delete",
+    `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
+    { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } }
+  );
   if (!res.ok && res.status !== 410) {
-    throw new HttpError(502, "No se pudo cancelar el evento en Google Calendar");
+    const detail = await res.text().catch(() => "");
+    console.error("Calendar delete falló", res.status, detail);
+    throw calendarError("delete", res.status, detail);
   }
 }
 
@@ -206,18 +209,109 @@ export async function getCalendarEvent(
   return event.status === "cancelled" ? null : event;
 }
 
+// ---------------------------------------------------------------------------
+// Errores de Calendar: causa real para el log, mensaje claro para el usuario
+// ---------------------------------------------------------------------------
+
+/**
+ * Traduce la respuesta de error de Google Calendar a un HttpError que la app puede explicar.
+ * `retryable: true` = es pasajero: la acción propuesta sigue vigente y se puede reintentar.
+ * Los textos son para el usuario casual; el detalle técnico queda solo en el log.
+ */
+function calendarError(op: string, status: number, detail: string): HttpError {
+  const fail = (httpStatus: number, message: string, code: string, retryable: boolean) =>
+    new HttpError(httpStatus, message, { code, retryable });
+
+  if (status === 401) {
+    return fail(
+      502,
+      "Google rechazó el acceso a tu calendario por un momento. Prueba de nuevo; si sigue pasando, cierra sesión en la app y vuelve a entrar.",
+      "calendar_auth",
+      true
+    );
+  }
+  if (status === 403) {
+    if (/insufficientPermissions|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(detail)) {
+      return fail(
+        403,
+        "Frami no tiene permiso para modificar tu calendario. Cierra sesión en la app y vuelve a entrar aceptando todos los permisos de Google Calendar.",
+        "calendar_permission",
+        false
+      );
+    }
+    if (/accessNotConfigured|SERVICE_DISABLED|has not been used/i.test(detail)) {
+      return fail(
+        502,
+        "El servicio de Google Calendar no está activado para esta app. No depende de ti: avisa al soporte.",
+        "calendar_config",
+        false
+      );
+    }
+    if (/rateLimit|quotaExceeded/i.test(detail)) {
+      return fail(
+        503,
+        "Google Calendar está recibiendo demasiados pedidos. Espera unos segundos y vuelve a intentar.",
+        "calendar_unavailable",
+        true
+      );
+    }
+    return fail(
+      403,
+      "Google no permitió modificar ese calendario o evento. Revisa que tengas permiso de edición sobre él.",
+      "calendar_forbidden",
+      false
+    );
+  }
+  if (status === 400) {
+    return fail(
+      502,
+      "Google no aceptó los datos del evento (por ejemplo la fecha u hora). Pídeme el evento de nuevo indicando día y hora con claridad.",
+      "calendar_bad_request",
+      false
+    );
+  }
+  if (status === 404 || status === 410) {
+    return fail(404, "Ese evento ya no existe en tu calendario.", "calendar_not_found", false);
+  }
+  // 429, 5xx u otro: del lado de Google, pasajero.
+  console.error(`Calendar ${op} falló con estado inesperado`, status);
+  return fail(
+    503,
+    "Google Calendar no respondió bien en este momento. No es un problema de tu cuenta. Prueba de nuevo en un momento.",
+    "calendar_unavailable",
+    true
+  );
+}
+
+/** Llama a Calendar; una caída de red o un corte por tiempo también se informan como "pasajero". */
+async function calendarCall(op: string, url: string, init: RequestInit): Promise<Response> {
+  let res: Response;
+  try {
+    res = await tfetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+  } catch (err) {
+    console.error(`Calendar ${op} sin respuesta:`, (err as Error).message);
+    throw new HttpError(
+      503,
+      "No pude conectarme con Google Calendar. Prueba de nuevo en un momento.",
+      { code: "calendar_unavailable", retryable: true }
+    );
+  }
+  return res;
+}
+
 export async function createCalendarEvent(
   accessToken: string,
   input: CalendarEventInput
 ): Promise<GoogleCalendarEvent> {
-  const res = await tfetch(`${CALENDAR_API}/calendars/primary/events`, {
+  const res = await calendarCall("create", `${CALENDAR_API}/calendars/primary/events`, {
     method: "POST",
     headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
     body: JSON.stringify(toGoogleEventBody(input)),
   });
   if (!res.ok) {
-    console.error("Calendar create falló", res.status, await res.text().catch(() => ""));
-    throw new HttpError(502, "No se pudo crear el evento en Google Calendar");
+    const detail = await res.text().catch(() => "");
+    console.error("Calendar create falló", res.status, detail);
+    throw calendarError("create", res.status, detail);
   }
   return (await res.json()) as GoogleCalendarEvent;
 }
@@ -227,7 +321,8 @@ export async function patchCalendarEvent(
   eventId: string,
   input: CalendarEventInput
 ): Promise<GoogleCalendarEvent> {
-  const res = await tfetch(
+  const res = await calendarCall(
+    "patch",
     `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
     {
       method: "PATCH",
@@ -236,8 +331,9 @@ export async function patchCalendarEvent(
     }
   );
   if (!res.ok) {
-    console.error("Calendar patch falló", res.status, await res.text().catch(() => ""));
-    throw new HttpError(502, "No se pudo modificar el evento en Google Calendar");
+    const detail = await res.text().catch(() => "");
+    console.error("Calendar patch falló", res.status, detail);
+    throw calendarError("patch", res.status, detail);
   }
   return (await res.json()) as GoogleCalendarEvent;
 }

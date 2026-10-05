@@ -69,8 +69,31 @@ export default route(["POST"], async (req, res) => {
     const accessToken = await getGoogleAccessTokenForUser(userId);
     await executeAction(accessToken, action.type, payload);
   } catch (err) {
-    await exec("UPDATE pending_actions SET status = 'failed' WHERE id = ?", [action.id]);
-    throw err;
+    // Fallo pasajero (Google caído, límite por minuto, red): la acción NO se pierde. Vuelve a
+    // "pendiente" para que el usuario pueda reintentar con un toque, sin pedirle nada de nuevo a la
+    // IA (que justo puede estar saturada). Vence a la hora, así que no queda abierta para siempre.
+    // Fallo definitivo (permiso, datos inválidos): se marca fallida y no se reintenta.
+    const transient =
+      err instanceof HttpError ? err.extra?.retryable === true || err.status === 429 : true;
+    try {
+      await exec("UPDATE pending_actions SET status = ? WHERE id = ?", [
+        transient ? "pending" : "failed",
+        action.id,
+      ]);
+    } catch (dbErr) {
+      console.error("No se pudo actualizar el estado de la acción:", dbErr);
+    }
+    if (err instanceof HttpError) {
+      throw new HttpError(err.status, err.message, {
+        ...err.extra,
+        retryable: transient,
+      });
+    }
+    console.error("Confirmar acción falló:", err);
+    throw new HttpError(503, "No pude completar la acción en este momento. Prueba de nuevo.", {
+      code: "action_failed",
+      retryable: true,
+    });
   }
 
   res.status(200).json({ ok: true, executed: true });
