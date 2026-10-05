@@ -45,7 +45,7 @@ export function route(methods: string[], handler: Handler) {
           res.status(err.status).json({ error: err.message, ...err.extra });
         } else {
           console.error(err);
-          res.status(500).json({ error: "Error interno del servidor" });
+          res.status(500).json({ error: "Error interno del servidor", code: "server_error" });
         }
       } finally {
         logPerf({

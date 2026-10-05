@@ -158,10 +158,141 @@ function dailyQuotaWaitMs(status: number, body: string): number | null {
 }
 
 const MAX_STEPS = 5; // vueltas máximas de function calling por mensaje
-const REQUEST_TIMEOUT_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 15_000; // por intento: un intento colgado no debe comerse todo el presupuesto
 const TOTAL_BUDGET_MS = 55_000; // vercel.json: maxDuration = 60 s
-const RETRY_PAUSE_MS = 800;
-const MAX_PASSES = 2; // vueltas completas por la cadena de modelos si hay 503 / 429 / timeout
+const RETRY_BASE_MS = 600; // pausa base entre vueltas; crece x2 por vuelta + jitter
+const MAX_PASSES = 3; // vueltas completas por la cadena de modelos si hay 5xx / 429 / timeout
+
+/** Pausa entre vueltas: 600 ms, 1,2 s, 2,4 s... más hasta 40 % de jitter para no sincronizar reintentos. */
+function backoffMs(pass: number): number {
+  const base = RETRY_BASE_MS * 2 ** pass;
+  return Math.round(base + Math.random() * base * 0.4);
+}
+
+// ---------------------------------------------------------------------------
+// Fallos de la IA: qué pasó (para el log) y qué se le dice al usuario
+// ---------------------------------------------------------------------------
+
+/**
+ * Causas posibles de que la IA no responda. El texto técnico va SOLO al log del
+ * servidor; al usuario le llega `AI_FAILURES[kind].message`, en lenguaje simple y
+ * diciendo qué puede hacer.
+ */
+export type AiFailureKind =
+  | "quota" // cuota diaria de Google agotada
+  | "config" // API key inválida / sin permisos (401, 403)
+  | "overloaded" // Google saturado (503, 500)
+  | "rate_limited" // demasiados pedidos por minuto (429)
+  | "timeout" // el modelo no contestó a tiempo
+  | "network" // no se pudo conectar con Google
+  | "bad_request" // Google rechazó el pedido (400): error nuestro
+  | "unavailable"; // modelo dado de baja (404) u otro error inesperado
+
+interface AiFailureInfo {
+  status: number;
+  /** Código estable para que la app decida qué mostrar. No es texto para el usuario. */
+  code: string;
+  /** Texto para el usuario casual: qué pasó, de quién no es la culpa y qué hacer. */
+  message: string;
+  /** Segundos sugeridos de espera antes de reintentar (null = no aplica). */
+  retryAfterSeconds: number | null;
+}
+
+export const AI_FAILURES: Record<AiFailureKind, AiFailureInfo> = {
+  quota: {
+    status: 503,
+    code: "ai_quota",
+    message: "Frami alcanzó su límite diario de uso. Vuelve a intentarlo más tarde.",
+    retryAfterSeconds: null, // se calcula con el retryDelay real de Google
+  },
+  config: {
+    status: 502,
+    code: "ai_config",
+    message:
+      "Frami no está disponible por un problema de configuración del servicio. No depende de ti ni de tu conexión. Si sigue así, avisa al soporte de la app.",
+    retryAfterSeconds: null,
+  },
+  overloaded: {
+    status: 503,
+    code: "ai_overloaded",
+    message:
+      "Frami tiene mucha demanda en este momento y no pudo responderte. No es un problema de tu conexión ni de tu cuenta. Prueba de nuevo en un minuto.",
+    retryAfterSeconds: 30,
+  },
+  rate_limited: {
+    status: 429,
+    code: "ai_rate_limited",
+    message:
+      "Frami está recibiendo demasiados pedidos seguidos. Espera unos segundos y vuelve a enviar tu mensaje.",
+    retryAfterSeconds: 20,
+  },
+  timeout: {
+    status: 504,
+    code: "ai_timeout",
+    message:
+      "Frami tardó demasiado en responder y se canceló la consulta. Prueba de nuevo; si el pedido es largo, dividirlo en pasos suele ayudar.",
+    retryAfterSeconds: 10,
+  },
+  network: {
+    status: 502,
+    code: "ai_network",
+    message:
+      "No logramos conectarnos con el servicio de inteligencia artificial. Suele ser pasajero: prueba de nuevo en unos instantes.",
+    retryAfterSeconds: 15,
+  },
+  bad_request: {
+    status: 502,
+    code: "ai_bad_request",
+    message:
+      "Frami tuvo un problema técnico al procesar tu mensaje. Prueba reformularlo; si sigue pasando, avisa al soporte de la app.",
+    retryAfterSeconds: null,
+  },
+  unavailable: {
+    status: 503,
+    code: "ai_unavailable",
+    message:
+      "Frami no está disponible por ahora. Prueba de nuevo en unos minutos; si pasa mucho tiempo, avisa al soporte de la app.",
+    retryAfterSeconds: 60,
+  },
+};
+
+/** Si hay varias causas en una misma consulta, se informa la más útil para el usuario. */
+const FAILURE_PRIORITY: AiFailureKind[] = [
+  "quota",
+  "config",
+  "overloaded",
+  "rate_limited",
+  "timeout",
+  "network",
+  "bad_request",
+  "unavailable",
+];
+
+/** Traduce la respuesta HTTP de Gemini a una causa. */
+function classifyHttpFailure(status: number): AiFailureKind {
+  if (status === 429) return "rate_limited";
+  if (status === 503 || status === 500 || status === 502 || status === 504) return "overloaded";
+  if (status === 401 || status === 403) return "config";
+  if (status === 400) return "bad_request";
+  return "unavailable"; // 404 u otro código inesperado
+}
+
+/** Traduce una excepción de fetch (timeout o caída de red) a una causa. */
+function classifyThrown(err: unknown): AiFailureKind {
+  const name = (err as { name?: string } | null)?.name;
+  return name === "TimeoutError" || name === "AbortError" ? "timeout" : "network";
+}
+
+/** Arma el HttpError que recibe la app: texto claro + código estable + espera sugerida. */
+function aiError(kinds: Set<AiFailureKind>, quotaWait: number | null): HttpError {
+  const kind = FAILURE_PRIORITY.find((k) => kinds.has(k)) ?? "unavailable";
+  const info = AI_FAILURES[kind];
+  const wait = kind === "quota" ? quotaWait : info.retryAfterSeconds;
+  return new HttpError(info.status, info.message, {
+    code: info.code,
+    ...(wait !== null && wait > 0 ? { retryAfterSeconds: wait } : {}),
+  });
+}
 
 /**
  * Los modelos Gemini 3 "piensan" antes de responder (por defecto en nivel
@@ -687,7 +818,8 @@ async function callGemini(
   viaVoice: boolean,
   deadline: number
 ): Promise<GeminiResponse> {
-  const failures: string[] = [];
+  const failures: string[] = []; // detalle técnico: solo para el log
+  const kinds = new Set<AiFailureKind>(); // causas: de acá sale el mensaje al usuario
   let quotaSkips = 0; // modelos descartados por cuota diaria agotada
   const level = thinkingLevel();
   let sendThinking = level !== null;
@@ -731,6 +863,7 @@ async function callGemini(
           });
         } catch (err) {
           failures.push(`${model}: ${(err as Error).message} (${Date.now() - t0} ms)`);
+          kinds.add(classifyThrown(err));
           retryable = true; // timeout o red: probar el siguiente modelo / otra vuelta
           break;
         }
@@ -750,32 +883,38 @@ async function callGemini(
         if (waitMs !== null) {
           exhaustedUntil.set(model, Date.now() + waitMs);
           quotaSkips++;
+          kinds.add("quota");
           break;
         }
-        // 404 = modelo dado de baja; 503 / 429 = sobrecarga o límite por minuto: probar el siguiente / reintentar.
-        if (res.status === 503 || res.status === 429) retryable = true;
-        if (res.status !== 404 && res.status !== 503 && res.status !== 429) {
+
+        const kind = classifyHttpFailure(res.status);
+        kinds.add(kind);
+        // 503 / 5xx / 429 por minuto: transitorio, se prueba el siguiente modelo y se reintenta.
+        // 404 = modelo dado de baja: se prueba el siguiente, pero reintentar la vuelta no sirve.
+        if (kind === "overloaded" || kind === "rate_limited") retryable = true;
+        // 400 / 401 / 403: reintentar no cambia nada (clave inválida, pedido mal armado). Se corta ya.
+        if (kind === "config" || kind === "bad_request") {
           console.error("Gemini falló:", failures.join(" || "));
-          throw new HttpError(502, "El asistente no está disponible en este momento");
+          throw aiError(kinds, null);
         }
         break;
       }
     }
 
-    if (!retryable || deadline - Date.now() < RETRY_PAUSE_MS + 1500) break;
-    await new Promise((r) => setTimeout(r, RETRY_PAUSE_MS));
+    // Si todos los modelos están sin cuota diaria, no tiene sentido seguir dando vueltas.
+    if (quotaSkips >= modelChain().length) break;
+
+    const pause = backoffMs(pass);
+    if (!retryable || pass === MAX_PASSES - 1 || deadline - Date.now() < pause + 1500) break;
+    await new Promise((r) => setTimeout(r, pause));
   }
 
   console.error("Gemini falló:", failures.join(" || ") || "sin tiempo restante");
+  if (failures.length === 0) kinds.add("timeout"); // se agotó el presupuesto de tiempo antes de intentar
   const quotaWait = quotaSkips >= modelChain().length ? aiQuotaWaitSeconds() : null;
-  if (quotaWait !== null) {
-    throw new HttpError(
-      503,
-      "El asistente alcanzó su límite diario de uso de la IA. Vuelve a intentarlo más tarde.",
-      { code: "ai_quota", retryAfterSeconds: quotaWait }
-    );
-  }
-  throw new HttpError(502, "El asistente no está disponible en este momento");
+  // La cuota diaria solo se informa si TODOS los modelos están agotados; con uno solo, manda la otra causa.
+  if (quotaWait === null) kinds.delete("quota");
+  throw aiError(kinds, quotaWait);
 }
 
 // ---------------------------------------------------------------------------
@@ -1534,6 +1673,17 @@ export interface SendMessageInput {
   locationReason?: LocationReason;
 }
 
+/** Gemini respondió, pero sin texto: se explica el motivo en lenguaje simple. */
+function emptyReplyText(finishReason?: string, blockReason?: string): string {
+  if (blockReason || (finishReason && /SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION/i.test(finishReason))) {
+    return "No puedo responder a ese mensaje. Prueba decirlo de otra forma.";
+  }
+  if (finishReason === "MAX_TOKENS") {
+    return "Mi respuesta quedó demasiado larga y se cortó. Pídeme algo más puntual y lo intento de nuevo.";
+  }
+  return "No logré armar una respuesta esta vez. Prueba reformular tu mensaje o intenta de nuevo en un momento.";
+}
+
 export async function sendMessageToGemini(input: SendMessageInput): Promise<ChatReply> {
   const apiKey = process.env.GEMINI_API_KEY;
   const makeReply = (
@@ -1588,10 +1738,9 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
     const content = data.candidates?.[0]?.content;
 
     if (!content?.parts?.length) {
-      console.error("Gemini sin contenido:", data.candidates?.[0]?.finishReason, data.promptFeedback);
-      if (data.promptFeedback?.blockReason) {
-        finalText = "No puedo ayudar con ese mensaje.";
-      }
+      const finish = data.candidates?.[0]?.finishReason;
+      console.error("Gemini sin contenido:", finish, data.promptFeedback);
+      finalText = emptyReplyText(finish, data.promptFeedback?.blockReason);
       break;
     }
 
@@ -1648,7 +1797,7 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
       ? `Hecho: ${ctx.executed.description}.`
       : ctx.pending
         ? `${ctx.pending.description}. ¿La confirmas?`
-        : "No pude generar una respuesta. Intenta reformular el mensaje.";
+        : emptyReplyText();
   }
 
   return { ...makeReply(finalText, ctx.pending, ctx.executed), deviceAction: ctx.device };
