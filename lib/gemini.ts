@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { tfetch } from "./timing";
+import { altConfig, callAltProvider, AltProviderError } from "./altProvider";
 import { HttpError } from "./http";
 import { exec, query } from "./db";
 import { getGoogleAccessTokenForUser } from "./tokens";
@@ -117,18 +118,30 @@ export interface HistoryMessage {
 export const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 /**
- * Los modelos 1.5 y 2.x ya no están disponibles para cuentas nuevas. El
- * modelo principal se puede cambiar con GEMINI_MODEL sin tocar código; si
- * responde 404/503 se prueba el de respaldo (GEMINI_FALLBACK_MODEL).
+ * Cadena de modelos de Gemini. El principal se cambia con GEMINI_MODEL sin tocar código; si responde
+ * 404 / 429 / 503 se prueba el siguiente (GEMINI_FALLBACK_MODEL, varios separados por coma).
+ *
+ * Por defecto el respaldo termina en un modelo Flash-Lite: en el plan gratuito la cuota diaria se
+ * cuenta POR MODELO, así que cada modelo de la cadena suma su propio cupo. Un identificador que no
+ * exista (404) se recuerda un rato y se omite, para no gastar un viaje a Google en cada mensaje.
  */
 export function modelChain(): string[] {
   const primary = process.env.GEMINI_MODEL || "gemini-3.8-flash";
-  // Admite uno o varios modelos de respaldo separados por coma.
-  const fallbacks = (process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash")
+  const fallbacks = (process.env.GEMINI_FALLBACK_MODEL || "gemini-3.5-flash,gemini-3.5-flash-lite")
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
   return [...new Set([primary, ...fallbacks])];
+}
+
+/** Modelos que Google dijo que no existen (404): se omiten una hora. Vive en memoria de la instancia. */
+const missingUntil = new Map<string, number>();
+const MISSING_MODEL_MS = 3_600_000;
+
+/** Modelos de la cadena que existen (los que dieron 404 no cuentan para decidir si "todos agotaron la cuota"). */
+function liveModels(): string[] {
+  const now = Date.now();
+  return modelChain().filter((m) => (missingUntil.get(m) ?? 0) <= now);
 }
 
 /**
@@ -144,8 +157,10 @@ const exhaustedUntil = new Map<string, number>();
  * null = no se sabe / hay algún modelo disponible.
  */
 export function aiQuotaWaitSeconds(): number | null {
+  // Si hay un proveedor alternativo, aunque Gemini esté sin cuota el chat sigue funcionando: no se bloquea.
+  if (altConfig()) return null;
   const now = Date.now();
-  const waits = modelChain().map((m) => (exhaustedUntil.get(m) ?? 0) - now);
+  const waits = liveModels().map((m) => (exhaustedUntil.get(m) ?? 0) - now);
   if (waits.length === 0 || waits.some((w) => w <= 0)) return null;
   return Math.ceil(Math.min(...waits) / 1000);
 }
@@ -309,7 +324,7 @@ function thinkingLevel(): string | null {
 // Tipos mínimos de la API REST de Gemini
 // ---------------------------------------------------------------------------
 
-interface GeminiPart {
+export interface GeminiPart {
   text?: string;
   functionCall?: { id?: string; name: string; args?: Record<string, unknown> };
   functionResponse?: { id?: string; name: string; response: Record<string, unknown> };
@@ -319,12 +334,12 @@ interface GeminiPart {
   [key: string]: unknown;
 }
 
-interface GeminiContent {
+export interface GeminiContent {
   role: "user" | "model";
   parts: GeminiPart[];
 }
 
-interface GeminiResponse {
+export interface GeminiResponse {
   candidates?: { content?: GeminiContent; finishReason?: string }[];
   promptFeedback?: { blockReason?: string };
 }
@@ -833,6 +848,14 @@ async function callGemini(
       const remaining = deadline - Date.now();
       if (remaining < 1500) break;
 
+      if ((missingUntil.get(model) ?? 0) > Date.now()) {
+        if (pass === 0) {
+          failures.push(`${model}: no existe (omitido)`);
+          kinds.add("unavailable");
+        }
+        continue; // Google ya dijo que no existe: no se gasta otro viaje
+      }
+
       if ((exhaustedUntil.get(model) ?? 0) > Date.now()) {
         if (pass === 0) {
           failures.push(`${model}: cuota diaria agotada (omitido)`);
@@ -887,6 +910,7 @@ async function callGemini(
           break;
         }
 
+        if (res.status === 404) missingUntil.set(model, Date.now() + MISSING_MODEL_MS);
         const kind = classifyHttpFailure(res.status);
         kinds.add(kind);
         // 503 / 5xx / 429 por minuto: transitorio, se prueba el siguiente modelo y se reintenta.
@@ -902,7 +926,7 @@ async function callGemini(
     }
 
     // Si todos los modelos están sin cuota diaria, no tiene sentido seguir dando vueltas.
-    if (quotaSkips >= modelChain().length) break;
+    if (quotaSkips >= liveModels().length) break;
 
     const pause = backoffMs(pass);
     if (!retryable || pass === MAX_PASSES - 1 || deadline - Date.now() < pause + 1500) break;
@@ -911,7 +935,7 @@ async function callGemini(
 
   console.error("Gemini falló:", failures.join(" || ") || "sin tiempo restante");
   if (failures.length === 0) kinds.add("timeout"); // se agotó el presupuesto de tiempo antes de intentar
-  const quotaWait = quotaSkips >= modelChain().length ? aiQuotaWaitSeconds() : null;
+  const quotaWait = quotaSkips >= liveModels().length ? aiQuotaWaitSeconds() : null;
   // La cuota diaria solo se informa si TODOS los modelos están agotados; con uno solo, manda la otra causa.
   if (quotaWait === null) kinds.delete("quota");
   throw aiError(kinds, quotaWait);
@@ -1684,6 +1708,30 @@ function emptyReplyText(finishReason?: string, blockReason?: string): string {
   return "No logré armar una respuesta esta vez. Prueba reformular tu mensaje o intenta de nuevo en un momento.";
 }
 
+// ---------------------------------------------------------------------------
+// Respaldo: proveedor alternativo cuando Gemini no responde
+// ---------------------------------------------------------------------------
+
+/** Códigos de error de Gemini ante los que vale la pena probar el proveedor alternativo. */
+const FAILOVER_CODES = new Set([
+  "ai_quota",
+  "ai_overloaded",
+  "ai_rate_limited",
+  "ai_timeout",
+  "ai_network",
+  "ai_unavailable",
+]);
+// ai_config y ai_bad_request NO: son un problema de clave o de nuestro pedido, no de capacidad de Google.
+
+const canFailover = (err: unknown) =>
+  err instanceof HttpError && typeof err.extra?.code === "string" && FAILOVER_CODES.has(err.extra.code);
+
+/** Tiempo que se le deja al alternativo cuando Gemini se toma todo el que puede. */
+const ALT_RESERVE_MS = 15_000;
+/** Tras fallar Gemini por capacidad, se va directo al alternativo este tiempo (evita esperar en cada mensaje). */
+const GEMINI_COOLDOWN_MS = 45_000;
+let geminiCooldownUntil = 0;
+
 export async function sendMessageToGemini(input: SendMessageInput): Promise<ChatReply> {
   const apiKey = process.env.GEMINI_API_KEY;
   const makeReply = (
@@ -1732,11 +1780,56 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
   };
 
   let finalText = "";
+  // Una vez que un mensaje pasa al proveedor alternativo se queda ahí hasta terminar: el historial de
+  // herramientas de Gemini (con sus firmas internas) no se puede volver a entregar a Gemini si lo
+  // continuó otro modelo.
+  let usingAlt = false;
+
+  /** Pide la siguiente respuesta: Gemini primero y, si no hay capacidad, el proveedor alternativo. */
+  const generate = async (): Promise<GeminiResponse> => {
+    const alt = altConfig();
+    const viaVoice = input.viaVoice === true;
+    if (!alt) return callGemini(apiKey, contents, tz, settings, viaVoice, deadline);
+
+    let primaryError: unknown = null;
+    if (!usingAlt) {
+      if (Date.now() < geminiCooldownUntil) {
+        usingAlt = true; // Gemini falló hace instantes: no se le vuelve a esperar
+      } else {
+        try {
+          // Se reserva tiempo para el alternativo: Gemini no puede gastarse todo el presupuesto.
+          return await callGemini(apiKey, contents, tz, settings, viaVoice, deadline - ALT_RESERVE_MS);
+        } catch (err) {
+          if (!canFailover(err)) throw err;
+          primaryError = err;
+          usingAlt = true;
+          if ((err as HttpError).extra?.code !== "ai_quota") geminiCooldownUntil = Date.now() + GEMINI_COOLDOWN_MS;
+          console.error("Gemini sin capacidad; se usa el proveedor alternativo:", (err as HttpError).extra?.code);
+        }
+      }
+    }
+
+    try {
+      const res = await callAltProvider(
+        alt,
+        systemPrompt(tz, settings, viaVoice),
+        contents,
+        toolsFor(settings.appAccess),
+        deadline
+      );
+      console.info("IA: respondió el proveedor alternativo", alt.model);
+      return res;
+    } catch (altErr) {
+      console.error("El proveedor alternativo también falló:", altErr instanceof AltProviderError ? altErr.message : altErr);
+      // Se informa la causa de Gemini (la principal); si no hubo (se omitió por enfriamiento), un genérico.
+      throw primaryError ?? aiError(new Set<AiFailureKind>(["unavailable"]), null);
+    }
+  };
 
   for (let step = 0; step < MAX_STEPS; step++) {
     let data: GeminiResponse;
     try {
-      data = await callGemini(apiKey, contents, tz, settings, input.viaVoice === true, deadline);
+      data = await generate();
     } catch (err) {
       // La acción ya quedó propuesta o aplicada en una vuelta anterior y solo falló la redacción de
       // la respuesta. Tirar un error acá le haría creer al usuario que no pasó nada (y en Piloto
