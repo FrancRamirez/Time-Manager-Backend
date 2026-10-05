@@ -115,6 +115,30 @@ process.env.GEMINI_API_KEY = "test";
   ok(!r3.locationRequest && meteo().length === 0, "sin permiso no hay consulta ni nuevo pedido");
   ok(JSON.stringify(gemini()[1].body.contents.at(-1)).includes("how_to_proceed"), "se le indica preguntar la ciudad");
 
+  // 7b. El modelo recibe el MOTIVO real del fallo (permiso, ubicación apagada, tiempo agotado...)
+  const reasons: [string, string][] = [
+    ["denied", "no dio el permiso"], ["blocked", "desactivado para la app"], ["services_off", "ubicación del teléfono está apagada"],
+    ["timeout", "no logró fijar"], ["error", "No se pudo obtener la ubicación en este teléfono"],
+  ];
+  for (const [reason, expected] of reasons) {
+    reset(); geminiScript = [fnCall("get_forecast"), text("ok")];
+    await sendMessageToGemini({ ...base, locationUnavailable: true, locationReason: reason as any });
+    const sent = JSON.stringify(gemini()[1].body.contents.at(-1));
+    ok(sent.includes(expected) && sent.includes("ni digas que no puedes consultar el clima"), `motivo "${reason}" llega al modelo`);
+  }
+  reset(); geminiScript = [fnCall("get_forecast"), text("ok")];
+  await sendMessageToGemini({ ...base, locationUnavailable: true });
+  ok(JSON.stringify(gemini()[1].body.contents.at(-1)).includes("sin permiso o con la ubicación apagada"), "sin motivo (apps viejas): texto genérico de siempre");
+  const { parseLocationReason } = await import("../lib/weather");
+  ok(parseLocationReason("blocked") === "blocked" && parseLocationReason("hack") === undefined && parseLocationReason(5) === undefined, "el motivo se valida contra una lista cerrada");
+
+  // 7c. El prompt describe TODAS las capacidades y prohíbe negar el acceso sin intentar la herramienta
+  const { systemPrompt } = await import("../lib/gemini");
+  const { DEFAULT_SETTINGS } = await import("../lib/schedule");
+  const prompt = systemPrompt("America/Argentina/Buenos_Aires", DEFAULT_SETTINGS, false);
+  ok(/consultar el clima/.test(prompt.split("\n")[0]) && /SMS/.test(prompt.split("\n")[0]) && /marcador/.test(prompt.split("\n")[0]), "la presentación incluye clima, SMS y llamadas");
+  ok(prompt.includes("Nunca digas que no puedes consultar el clima"), "el prompt prohíbe negar el clima sin llamar a la herramienta");
+
   // 8. Con ciudad no hace falta ubicación
   reset(); geoResults = [{ name: "Mendoza", latitude: -32.89, longitude: -68.83, country: "Argentina", admin1: "Mendoza" }];
   geminiScript = [fnCall("get_forecast", { city: "Mendoza" }), text("En Mendoza: soleado.")];

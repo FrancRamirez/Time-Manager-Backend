@@ -3,7 +3,7 @@ import { requireUser } from "../../lib/auth";
 import { sendMessageToGemini, type HistoryMessage } from "../../lib/gemini";
 import { parseSettings } from "../../lib/schedule";
 import { parseAlarms } from "../../lib/clock";
-import { parseLocation } from "../../lib/weather";
+import { parseLocation, parseLocationReason } from "../../lib/weather";
 import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../lib/usage";
 
 const MAX_MESSAGE_CHARS = 2000;
@@ -63,6 +63,7 @@ export default route(["POST"], async (req, res) => {
     alarms: parseAlarms(body.alarms),
     location: parseLocation(body.location),
     locationUnavailable: body.locationUnavailable === true,
+    locationReason: parseLocationReason(body.locationReason),
   });
 
   // Falta la ubicación para el pronóstico: no hubo respuesta para el usuario, así que no cuenta como

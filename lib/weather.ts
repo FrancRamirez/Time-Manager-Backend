@@ -39,6 +39,33 @@ export function roundCoord(n: number): number {
 }
 
 /** Valida lo que manda la app. Cualquier cosa rara = null (como si no hubiera ubicación). */
+/** Por qué la app no pudo dar la ubicación (lo informa la propia app; solo sirve para explicarlo). */
+export type LocationReason = "denied" | "blocked" | "services_off" | "timeout" | "error";
+
+const LOCATION_REASONS: LocationReason[] = ["denied", "blocked", "services_off", "timeout", "error"];
+
+export function parseLocationReason(raw: unknown): LocationReason | undefined {
+  return LOCATION_REASONS.find((r) => r === raw);
+}
+
+/** Texto que ve el modelo para cada motivo (nada de esto se muestra tal cual al usuario). */
+export function describeLocationFailure(reason: LocationReason | undefined): string {
+  switch (reason) {
+    case "denied":
+      return "El usuario no dio el permiso de ubicación a la app.";
+    case "blocked":
+      return "El permiso de ubicación está desactivado para la app en los ajustes del teléfono.";
+    case "services_off":
+      return "La ubicación del teléfono está apagada.";
+    case "timeout":
+      return "El teléfono no logró fijar la ubicación a tiempo.";
+    case "error":
+      return "No se pudo obtener la ubicación en este teléfono.";
+    default:
+      return "No se pudo obtener la ubicación del usuario (sin permiso o con la ubicación apagada).";
+  }
+}
+
 export function parseLocation(raw: unknown): Coords | null {
   if (typeof raw !== "object" || raw === null) return null;
   const { lat, lon } = raw as Record<string, unknown>;
