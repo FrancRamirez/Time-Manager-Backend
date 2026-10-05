@@ -47,7 +47,7 @@ async function call(fn: any, method: string, url: string, extra: any = {}) {
   // 2. Cada URL que usa la app (y el planificador) llega a SU handler real: sin sesión responde 400/401/503, nunca 404
   const urls: [keyof typeof loads, string, string][] = [
     ["auth", "POST", "/api/auth/google"], ["auth", "GET", "/api/auth/me"], ["auth", "POST", "/api/auth/refresh"],
-    ["ai", "POST", "/api/ai/chat"], ["ai", "GET", "/api/ai/usage"], ["ai", "POST", "/api/ai/actions/3f2a9c1e-77aa-4b1c-9d0e-123456789abc/confirm"],
+    ["ai", "POST", "/api/ai/chat"], ["ai", "GET", "/api/ai/usage"], ["ai", "POST", "/api/ai/actions/3f2a9c1e-77aa-4b1c-9d0e-123456789abc/confirm"], ["ai", "POST", "/api/ai/confirm"],
     ["calendar", "GET", "/api/calendar/events?days=7"], ["calendar", "DELETE", "/api/calendar/events/abc123def456"],
     ["calendar", "POST", "/api/calendar/scan"], ["calendar", "GET", "/api/calendar/suggestions"], ["calendar", "POST", "/api/calendar/suggestions/abc123def456"],
     ["devices", "POST", "/api/devices/register"], ["devices", "POST", "/api/devices/unregister"],

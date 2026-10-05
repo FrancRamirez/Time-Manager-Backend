@@ -12,17 +12,58 @@ interface PendingActionRow {
   payload: unknown;
 }
 
-export default route(["POST"], async (req, res) => {
-  const userId = await requireUser(req);
-  const actionId = req.query.actionId;
-  if (typeof actionId !== "string") {
-    throw new HttpError(400, "Falta actionId");
+/** Por qué no se encontró una acción vigente: se distingue para dar un mensaje claro y para el log. */
+async function whyNotFound(actionId: string, userId: string): Promise<HttpError> {
+  let row: { status: string; mine: number | string; expired: number | string } | undefined;
+  try {
+    [row] = await query<{ status: string; mine: number | string; expired: number | string }>(
+      `SELECT status,
+              (user_id = ?) AS mine,
+              (created_at <= NOW() - INTERVAL 1 HOUR) AS expired
+       FROM pending_actions WHERE id = ?`,
+      [userId, actionId]
+    );
+  } catch (err) {
+    console.error("confirm: no se pudo averiguar el motivo del 404:", err);
   }
 
-  const body = bodyOf(req);
-  if (typeof body.approve !== "boolean") {
-    throw new HttpError(400, "Falta approve (boolean)");
+  if (!row || Number(row.mine) !== 1) {
+    console.error("confirm 404: la acción no existe para este usuario", { actionId });
+    return new HttpError(404, "No encontré esa acción. Pídesela de nuevo a Frami.", {
+      code: "action_not_found",
+    });
   }
+  if (row.status === "pending" && Number(row.expired) === 1) {
+    console.error("confirm 404: la acción venció", { actionId });
+    return new HttpError(404, "Esta acción venció (duran una hora). Pídesela de nuevo a Frami.", {
+      code: "action_expired",
+    });
+  }
+  console.error("confirm 404: la acción ya estaba resuelta", { actionId, status: row.status });
+  return new HttpError(
+    409,
+    row.status === "failed"
+      ? "Esta acción falló antes y ya no se puede reintentar. Pídesela de nuevo a Frami."
+      : "Esta acción ya se había resuelto. Revisa tu agenda: puede que ya esté lista.",
+    { code: "action_resolved", status: row.status }
+  );
+}
+
+export default route(["POST"], async (req, res) => {
+  const userId = await requireUser(req);
+
+  const body = bodyOf(req);
+  // El id viaja en el cuerpo (/api/ai/confirm) o en la ruta (/api/ai/actions/:actionId/confirm).
+  const rawId = typeof req.query.actionId === "string" ? req.query.actionId : body.actionId;
+  if (typeof rawId !== "string" || !rawId || rawId.length > 64) {
+    throw new HttpError(400, "Falta actionId", { code: "action_bad_request" });
+  }
+  const actionId = rawId;
+
+  if (typeof body.approve !== "boolean") {
+    throw new HttpError(400, "Falta approve (boolean)", { code: "action_bad_request" });
+  }
+  console.info("confirm: pedido recibido", { actionId, approve: body.approve });
 
   // Las acciones propuestas vencen a la hora: evita confirmar algo viejo.
   const rows = await query<PendingActionRow>(
@@ -33,7 +74,7 @@ export default route(["POST"], async (req, res) => {
   );
   const action = rows[0];
   if (!action) {
-    throw new HttpError(404, "Acción no encontrada, vencida o ya resuelta");
+    throw await whyNotFound(actionId, userId);
   }
 
   if (!body.approve) {
@@ -57,7 +98,9 @@ export default route(["POST"], async (req, res) => {
     [action.id]
   );
   if (claim.affectedRows !== 1) {
-    throw new HttpError(409, "La acción ya fue resuelta");
+    throw new HttpError(409, "Esta acción ya se había resuelto. Revisa tu agenda: puede que ya esté lista.", {
+      code: "action_resolved",
+    });
   }
 
   // mysql2 devuelve las columnas JSON ya parseadas; por si llegara como texto:

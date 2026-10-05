@@ -1,4 +1,4 @@
-package com.timemanagerapi
+package com.anonymous.timemanagerapi
 
 import android.os.Build
 import android.os.Bundle

@@ -21,6 +21,9 @@ export const aiRoutes: Record<string, RouteHandler> = {
   chat,
   usage,
   diagnose,
+  // Ruta de 2 segmentos (como /chat y /usage, que sabemos que llegan a la función): la app la usa y
+  // manda el id en el cuerpo. La de 3 segmentos se conserva por compatibilidad con apps ya instaladas.
+  confirm,
   "actions/:actionId/confirm": confirm,
 };
 
