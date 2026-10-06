@@ -4,6 +4,7 @@ import { sendMessageToGemini, type HistoryMessage } from "../../gemini";
 import { parseSettings } from "../../schedule";
 import { parseAlarms } from "../../clock";
 import { parseLocation, parseLocationReason } from "../../weather";
+import { quickReply } from "../../quickReply";
 import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../usage";
 
 const MAX_MESSAGE_CHARS = 2000;
@@ -33,6 +34,23 @@ export default route(["POST"], async (req, res) => {
   }
   if (body.message.length > MAX_MESSAGE_CHARS) {
     throw new HttpError(400, "El mensaje es demasiado largo");
+  }
+
+  // Agradecimientos, saludos y despedidas se responden acá: no gastan cuota de IA ni cuentan en el cupo del
+  // usuario (por eso van antes de revisar el límite: aunque lo haya agotado, un "gracias" no necesita al modelo).
+  const quick = quickReply(body.message);
+  if (quick !== null) {
+    let usage: UsageSnapshot | undefined;
+    try {
+      usage = snapshot(await messagesUsedToday(userId));
+    } catch {
+      /* sin contador: la respuesta sale igual */
+    }
+    res.status(200).json({
+      reply: { id: `quick-${Date.now()}`, role: "assistant", content: quick, createdAt: new Date().toISOString() },
+      usage,
+    });
+    return;
   }
 
   // Cupo diario propio. Si la base de datos de uso falla, el chat sigue funcionando sin contador.

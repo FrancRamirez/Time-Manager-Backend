@@ -182,7 +182,16 @@ function dailyQuotaWaitMs(status: number, body: string): number | null {
   return (m ? Number(m[1]) : 3600) * 1000;
 }
 
-const MAX_STEPS = 5; // vueltas máximas de function calling por mensaje
+// Vueltas máximas de function calling por mensaje. Cada vuelta es una solicitud a Gemini y la cuota gratuita
+// es diaria y por modelo: un caso normal usa 2 (herramienta + respuesta) o 3 (consultar y luego actuar).
+const MAX_STEPS = 4;
+
+/**
+ * Respuesta rápida tras una acción: cuando el mensaje ya dejó una acción propuesta o aplicada, se omite la
+ * última solicitud a Gemini (que solo redactaría la confirmación) y se usa el texto que arma el servidor.
+ * Ahorra 1 solicitud por cada acción. AI_FAST_ACTIONS=0 lo desactiva y vuelve a la respuesta redactada por la IA.
+ */
+const fastActions = () => process.env.AI_FAST_ACTIONS?.trim() !== "0";
 const REQUEST_TIMEOUT_MS = 15_000; // por intento: un intento colgado no debe comerse todo el presupuesto
 const TOTAL_BUDGET_MS = 55_000; // vercel.json: maxDuration = 60 s
 const RETRY_BASE_MS = 600; // pausa base entre vueltas; crece x2 por vuelta + jitter
@@ -867,6 +876,7 @@ export function systemPrompt(tz: string, settings: AssistantSettings, viaVoice: 
     ...modeRules,
     "- Antes de mover o cancelar algo, llama a list_events y usa el id exacto que devuelva. Nunca inventes ids.",
     "- Propón o aplica una sola acción por mensaje. Si el pedido implica varias, haz la primera y avisa que las demás van después.",
+    "- Eficiencia (cada vuelta de herramientas gasta la cuota diaria): si necesitas varias consultas independientes (por ejemplo list_events y get_forecast), pídelas todas juntas en el mismo paso; no repitas una consulta que ya hiciste ni verifiques con otra herramienta una acción que acabas de proponer o aplicar.",
     "- Si falta un dato imprescindible (qué evento, qué hora), pregúntalo en vez de adivinar. Si el pedido es ambiguo entre varios eventos, pide aclaración.",
     "- Elige horarios que respeten el buffer y las franjas intocables. Si la herramienta rechaza un horario, explícale el motivo al usuario y ofrece alternativas cercanas libres (revisa con list_events); no insistas con el mismo horario.",
     "- Solo usa allow_conflicts=true si el usuario lo pidió explícitamente después de conocer el conflicto. Las franjas intocables no se pueden saltear.",
@@ -1370,6 +1380,17 @@ const CLOCK_WRITE_TOOLS = [
   "open_didi",
 ];
 
+/** Herramientas que crean, cambian, envían o abren algo (escriben). */
+function isWriteToolName(name: string): boolean {
+  return (
+    name === "create_event" ||
+    name === "reschedule_event" ||
+    name === "cancel_event" ||
+    EMAIL_WRITE_TOOLS.includes(name) ||
+    CLOCK_WRITE_TOOLS.includes(name)
+  );
+}
+
 async function runTool(
   ctx: ToolContext,
   name: string,
@@ -1379,12 +1400,7 @@ async function runTool(
   const restricted = toolRestriction(ctx.settings.appAccess, name);
   if (restricted) return { error: restricted };
 
-  const isWrite =
-    name === "create_event" ||
-    name === "reschedule_event" ||
-    name === "cancel_event" ||
-    EMAIL_WRITE_TOOLS.includes(name) ||
-    CLOCK_WRITE_TOOLS.includes(name);
+  const isWrite = isWriteToolName(name);
   if (isWrite && (ctx.pending || ctx.executed || ctx.device)) {
     return { error: "Ya hay una acción en este mensaje. Haz solo una por vez." };
   }
@@ -2137,18 +2153,32 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
         locationRequest: true,
       };
     }
+
+    // La acción ya quedó propuesta o aplicada y todas las herramientas de esta vuelta fueron de escritura sin
+    // errores: no hace falta otra solicitud a Gemini solo para redactar el aviso (lo arma el servidor abajo).
+    // Con un error, o si además se consultó algo, el modelo sigue porque tiene que explicarlo.
+    if (
+      fastActions() &&
+      (ctx.pending || ctx.executed || ctx.device) &&
+      calls.every((p) => isWriteToolName(p.functionCall!.name)) &&
+      responses.every((r) => !("error" in (r.functionResponse?.response ?? {})))
+    ) {
+      break;
+    }
     contents.push({ role: "user", parts: responses });
   }
 
   if (!finalText) {
+    // Las descripciones pueden traer su propio punto final: se quita para no duplicarlo.
+    const bare = (t: string) => t.replace(/[.\s]+$/, "");
     finalText = ctx.device
       ? ctx.device.requiresConfirmation
-        ? `${ctx.device.description}. ¿La confirmas?`
-        : `Hecho: ${ctx.device.description}.`
+        ? `${bare(ctx.device.description)}. ¿La confirmas?`
+        : `Hecho: ${bare(ctx.device.description)}.`
       : ctx.executed
-      ? `Hecho: ${ctx.executed.description}.`
+      ? `Hecho: ${bare(ctx.executed.description)}.`
       : ctx.pending
-        ? `${ctx.pending.description}. ¿La confirmas?`
+        ? `${bare(ctx.pending.description)}. ¿La confirmas?`
         : emptyReplyText();
   }
 
