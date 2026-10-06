@@ -9,7 +9,7 @@
 // confirmar acciones lo revisan por su cuenta.
 
 export type AccessLevel = "allowed" | "read_only" | "blocked";
-export type AppId = "calendar" | "gmail" | "clock" | "whatsapp" | "sms" | "calls" | "forecast";
+export type AppId = "calendar" | "gmail" | "clock" | "whatsapp" | "sms" | "calls" | "forecast" | "maps" | "didi";
 export type AppAccess = Record<AppId, AccessLevel>;
 
 export const DEFAULT_APP_ACCESS: AppAccess = {
@@ -20,6 +20,8 @@ export const DEFAULT_APP_ACCESS: AppAccess = {
   sms: "allowed",
   calls: "allowed",
   forecast: "allowed",
+  maps: "allowed",
+  didi: "allowed",
 };
 
 /** Niveles válidos por app: "Solo lectura" existe únicamente donde hay lectura Y escritura. */
@@ -31,6 +33,8 @@ export const APP_LEVELS: Record<AppId, AccessLevel[]> = {
   sms: ["allowed", "blocked"],
   calls: ["allowed", "blocked"],
   forecast: ["allowed", "blocked"],
+  maps: ["allowed", "blocked"],
+  didi: ["allowed", "blocked"],
 };
 
 export const APP_NAMES: Record<AppId, string> = {
@@ -41,6 +45,8 @@ export const APP_NAMES: Record<AppId, string> = {
   sms: "SMS",
   calls: "Llamadas",
   forecast: "Pronóstico",
+  maps: "Google Maps",
+  didi: "DiDi",
 };
 
 /** A qué app pertenece cada herramienta y si escribe (crea, cambia, envía o borra). */
@@ -64,6 +70,10 @@ const TOOL_APP: Record<string, { app: AppId; write: boolean }> = {
   compose_sms: { app: "sms", write: true },
   compose_call: { app: "calls", write: true },
   get_forecast: { app: "forecast", write: false },
+  search_place: { app: "maps", write: false },
+  get_directions: { app: "maps", write: false },
+  open_maps_route: { app: "maps", write: true },
+  open_didi: { app: "didi", write: true },
 };
 
 /** Tipo de acción pendiente (pending_actions.type) -> app que toca. */

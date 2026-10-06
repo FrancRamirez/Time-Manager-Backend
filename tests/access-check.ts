@@ -7,10 +7,10 @@ const ok = (c: boolean, m: string) => { if (!c) { fails++; console.log("FALLA:",
 const names = TOOLS.flatMap((g) => g.functionDeclarations).map((d) => d.name);
 console.log("herramientas declaradas:", names.length);
 // Con TODO permitido deben declararse todas: una herramienta sin mapear quedaría permitida y la restricción no se aplicaría.
-ok(names.every((n) => toolRestriction({ calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked" }, n) !== null), "toda herramienta declarada debe estar mapeada a una app");
+ok(names.every((n) => toolRestriction({ calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked", maps: "blocked", didi: "blocked" }, n) !== null), "toda herramienta declarada debe estar mapeada a una app");
 
 // 1. Ninguna herramienta declarada puede escaparse del mapa: con todo bloqueado no debe quedar ninguna.
-const allBlocked = { calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked" } as const;
+const allBlocked = { calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked", maps: "blocked", didi: "blocked" } as const;
 const left = (toolsFor(allBlocked)?.[0].functionDeclarations ?? []).map((d) => d.name);
 ok(left.length === 0, `con todo bloqueado quedan herramientas sin mapear: ${left.join(", ")}`);
 ok(toolsFor(allBlocked) === undefined, "con todo bloqueado no debe mandarse el campo tools");
@@ -19,10 +19,10 @@ ok(toolsFor(allBlocked) === undefined, "con todo bloqueado no debe mandarse el c
 ok(toolsFor(DEFAULT_APP_ACCESS)![0].functionDeclarations.length === names.length, "por defecto deben declararse todas");
 
 // 3. Solo lectura: quedan solo las de lectura.
-const ro = { calendar: "read_only", gmail: "read_only", clock: "read_only", whatsapp: "allowed", sms: "allowed", calls: "allowed", forecast: "allowed" } as const;
+const ro = { calendar: "read_only", gmail: "read_only", clock: "read_only", whatsapp: "allowed", sms: "allowed", calls: "allowed", forecast: "allowed", maps: "allowed", didi: "allowed" } as const;
 const roNames = toolsFor(ro)![0].functionDeclarations.map((d) => d.name).sort();
 console.log("solo lectura ->", roNames.join(", "));
-const expectRO = ["list_events","search_emails","read_email","list_alarms","compose_whatsapp","compose_sms","compose_call","get_forecast"].sort();
+const expectRO = ["list_events","search_emails","read_email","list_alarms","compose_whatsapp","compose_sms","compose_call","get_forecast","search_place","get_directions","open_maps_route","open_didi"].sort();
 ok(JSON.stringify(roNames) === JSON.stringify(expectRO), "solo lectura debe dejar exactamente las herramientas de lectura (+WhatsApp permitido)");
 
 // 4. Cada nivel por app, de forma aislada.
@@ -42,6 +42,16 @@ ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, calls: "blocked" }, "compose_call") && 
 ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, forecast: "blocked" }, "get_forecast"), "Pronóstico bloqueado");
 ok(toolAllowed(DEFAULT_APP_ACCESS, "get_forecast"), "Pronóstico permitido por defecto");
 ok(parseAppAccess({ forecast: "read_only" }).forecast === "blocked", "forecast no admite solo lectura (inválido = bloqueado)");
+for (const t of ["search_place", "get_directions", "open_maps_route"]) {
+  ok(toolAllowed(DEFAULT_APP_ACCESS, t), `${t} permitido por defecto`);
+  ok(!toolAllowed({ ...DEFAULT_APP_ACCESS, maps: "blocked" }, t), `${t} bloqueado con Maps bloqueado`);
+}
+ok(toolAllowed({ ...DEFAULT_APP_ACCESS, maps: "blocked" }, "get_forecast") && toolAllowed({ ...DEFAULT_APP_ACCESS, maps: "blocked" }, "compose_call"), "bloquear Maps no afecta a otras apps");
+ok(parseAppAccess({ maps: "read_only" }).maps === "blocked", "maps no admite solo lectura (inválido = bloqueado)");
+ok(parseAppAccess({}).maps === "allowed", "sin dato de maps = permitido (apps viejas)");
+ok(toolAllowed(DEFAULT_APP_ACCESS, "open_didi") && !toolAllowed({ ...DEFAULT_APP_ACCESS, didi: "blocked" }, "open_didi"), "open_didi sigue a DiDi");
+ok(toolAllowed({ ...DEFAULT_APP_ACCESS, didi: "blocked" }, "open_maps_route") && toolAllowed({ ...DEFAULT_APP_ACCESS, maps: "blocked" }, "open_didi"), "DiDi y Maps se restringen por separado");
+ok(parseAppAccess({ didi: "read_only" }).didi === "blocked" && parseAppAccess({}).didi === "allowed", "didi: solo lectura inválido; ausente = permitido");
 
 // 5. Validación del cliente: ausente = permitido; inválido = bloqueado (más seguro); WhatsApp no admite solo lectura.
 ok(parseAppAccess(undefined).calendar === "allowed", "sin appAccess = permitido");
