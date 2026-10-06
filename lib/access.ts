@@ -45,7 +45,7 @@ export const APP_NAMES: Record<AppId, string> = {
   sms: "SMS",
   calls: "Llamadas",
   forecast: "Pronóstico",
-  maps: "Google Maps",
+  maps: "Mapas",
   didi: "DiDi",
 };
 

@@ -184,10 +184,13 @@ const TZ = "America/Argentina/Buenos_Aires";
   reset(); routeScript = [{ status: 400 }]; geminiScript = [fnCall("get_directions", { destination: "Zzzz", origin: "Ab" }), text("No la encontré.")];
   const c15 = await sendMessageToGemini(base);
   ok(c15.reply.content.includes("No la encontré") && lastTool().includes("con más detalle"), "dirección no encontrada -> pide más detalle");
+  // Modo "solo Google" y sin clave: no hay consultas y se sugiere abrir la ruta en la app (comportamiento original)
   delete process.env.GOOGLE_MAPS_API_KEY;
+  process.env.MAPS_PROVIDER = "google";
   reset(); geminiScript = [fnCall("get_directions", { destination: "Centro", origin: "Ab" }), text("Puedo abrir Maps.")];
   await sendMessageToGemini(base);
-  ok(routes().length === 0 && lastTool().includes("open_maps_route"), "sin clave sugiere abrir la ruta en Google Maps");
+  ok(routes().length === 0 && lastTool().includes("open_maps_route"), "sin clave (solo Google) sugiere abrir la ruta en la app de mapas");
+  delete process.env.MAPS_PROVIDER;
   process.env.GOOGLE_MAPS_API_KEY = "KEY-123";
 
   // 16. search_place: con near_me pide ubicación; sin near_me no
@@ -227,7 +230,7 @@ const TZ = "America/Argentina/Buenos_Aires";
   await sendMessageToGemini({ ...base, settings: { ...DEFAULT_SETTINGS, appAccess: { ...DEFAULT_SETTINGS.appAccess, maps: "blocked" } } });
   const declared = JSON.stringify(gemini()[0].body.tools);
   ok(!declared.includes("search_place") && !declared.includes("get_directions") && !declared.includes("open_maps_route") && declared.includes("list_events") && declared.includes("get_forecast"), "con Maps bloqueado no se declaran sus herramientas");
-  ok(JSON.stringify(gemini()[0].body.systemInstruction).includes("Google Maps: BLOQUEADA"), "el prompt informa la restricción");
+  ok(JSON.stringify(gemini()[0].body.systemInstruction).includes("Mapas: BLOQUEADA"), "el prompt informa la restricción");
 
   // 19. El prompt describe la capacidad y sus límites
   const { systemPrompt } = await import("../lib/gemini");

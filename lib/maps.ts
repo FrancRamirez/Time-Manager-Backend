@@ -48,12 +48,15 @@ export function cleanPlaceText(raw: unknown): string | null {
   return s.length >= 2 && s.length <= 200 ? s : null;
 }
 
+/** Quién resuelve una consulta de mapas. */
+export type MapsProviderName = "google" | "osm";
+
 export function mapsConfigured(): boolean {
   return !!process.env.GOOGLE_MAPS_API_KEY?.trim();
 }
 
 /** Por qué falló una consulta a Google Maps (para explicarlo; nunca lleva datos del usuario). */
-export type MapsErrorKind = "not_configured" | "not_found" | "quota" | "config" | "network" | "other";
+export type MapsErrorKind = "not_configured" | "not_found" | "quota" | "config" | "network" | "unsupported" | "other";
 
 export class MapsError extends Error {
   constructor(
@@ -97,6 +100,8 @@ async function mapsPost(url: string, fieldMask: string, body: unknown, what: str
 export interface FoundPlace {
   name: string;
   address: string;
+  /** Distancia en línea recta desde el usuario (solo si se buscó "cerca" y el proveedor da coordenadas). */
+  distance_km?: number;
 }
 
 export const MAX_PLACE_RESULTS = 3;
@@ -274,6 +279,8 @@ export function compactRoute(
     nowMs?: number;
     /** UTC ms -> "YYYY-MM-DDTHH:mm:ss" en la zona del usuario. */
     local: (ms: number) => string;
+    /** Quién calculó la ruta. Sin valor = Google Maps (comportamiento original). */
+    provider?: MapsProviderName;
   }
 ) {
   const now = opts.nowMs ?? Date.now();
@@ -299,10 +306,15 @@ export function compactRoute(
       out.late_by_min = Math.ceil((now - r.leaveByMs) / 60_000);
     }
   }
+  const provider = opts.provider ?? "google";
+  out.source = provider === "osm" ? "OpenStreetMap" : "Google Maps";
   out.note =
-    "Estimaciones de Google Maps" +
-    (opts.mode === "drive" ? " con el tráfico previsto" : "") +
-    ". Si el origen es la ubicación del usuario, es aproximada (~1 km). Las horas están en la zona del usuario.";
+    provider === "osm"
+      ? "Estimaciones de OpenStreetMap SIN tráfico en vivo (tiempo con la vía libre): en auto suma un margen " +
+        "razonable y dilo. Si el origen es la ubicación del usuario, es aproximada (~1 km). Las horas están en la zona del usuario."
+      : "Estimaciones de Google Maps" +
+        (opts.mode === "drive" ? " con el tráfico previsto" : "") +
+        ". Si el origen es la ubicación del usuario, es aproximada (~1 km). Las horas están en la zona del usuario.";
   return out;
 }
 
@@ -315,9 +327,18 @@ export interface MapsBody {
   /** Sin origen, Google Maps parte de la ubicación actual del teléfono. */
   origin?: string;
   mode: TravelMode;
+  /**
+   * Con qué app abrirla: "google" = Google Maps con la ruta completa (origen, destino y modo);
+   * "any" = el selector de mapas de Android con el destino (Google Maps, OsmAnd, Organic Maps...).
+   * Sin valor = "google" (comportamiento original).
+   */
+  open_with?: "google" | "any";
 }
 
 export function describeMaps(b: MapsBody): string {
+  if (b.open_with === "any") {
+    return `Abrir tu app de mapas con el destino "${b.destination}". Tú decides si inicias la navegación.`;
+  }
   return (
     `Abrir Google Maps con la ruta ${MODE_LABEL[b.mode]} hasta "${b.destination}"` +
     (b.origin ? ` desde "${b.origin}"` : " desde tu ubicación") +
