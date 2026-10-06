@@ -17,6 +17,7 @@ export type Step =
   | "gemini"
   | "fcm"
   | "weather"
+  | "maps"
   | "http";
 
 export interface StepTotals {
@@ -71,6 +72,7 @@ export function classifyUrl(raw: string): Step {
   if (h === "generativelanguage.googleapis.com") return "gemini";
   if (h === "fcm.googleapis.com") return "fcm";
   if (h.endsWith(".open-meteo.com")) return "weather";
+  if (h === "routes.googleapis.com" || h === "places.googleapis.com") return "maps";
   return "http";
 }
 

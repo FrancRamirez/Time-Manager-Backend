@@ -11,7 +11,7 @@ Al terminar cada request se escribe **una línea JSON** en los logs de Vercel:
  "steps":{"gemini":{"n":2,"ms":3600},"db":{"n":4,"ms":380},"calendar":{"n":1,"ms":210}}}
 ```
 `ms` es el total; en `steps` cada paso trae cuántas llamadas hizo (`n`) y cuánto sumaron (`ms`). Pasos:
-`db`, `google_token`, `calendar`, `gmail`, `gemini`, `fcm`, `weather`, `http`.
+`db`, `google_token`, `calendar`, `gmail`, `gemini`, `fcm`, `weather`, `maps`, `http`.
 No se guarda nada del usuario: ni ids, ni correos, ni contenido (los ids de las rutas salen como `:id`).
 Las peticiones de más de 5 s salen como `warn` para encontrarlas fácil. Para apagarlo: `PERF_LOG=0`.
 
