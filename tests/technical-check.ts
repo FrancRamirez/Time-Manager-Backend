@@ -2,7 +2,7 @@
 // razonamiento adaptativo, reglas del prompt y la herramienta calculate de punta a punta.
 // Ejecutar: npx tsx tests/technical-check.ts   (fetch simulado, sin red ni base de datos)
 import { evaluate, runCalculations } from "../lib/calc";
-import { looksTechnical, needsDeepThinking } from "../lib/technical";
+import { looksTechnical, looksKnowledge, needsDeepThinking } from "../lib/technical";
 import { sendMessageToGemini, systemPrompt, toolsFor } from "../lib/gemini";
 import { DEFAULT_SETTINGS } from "../lib/schedule";
 import { DEFAULT_APP_ACCESS } from "../lib/access";
@@ -83,11 +83,26 @@ ok(needsDeepThinking("ahora hazlo con varilla del 8", [{ role: "user", content: 
 ok(!needsDeepThinking("mueve el dentista", [{ role: "user", content: "hola" }, { role: "assistant", content: "hola" }]), "sin historial técnico no se activa");
 ok(!needsDeepThinking("gracias", [{ role: "user", content: "x" }, { role: "user", content: "y" }, { role: "user", content: "calcula 2 + 2" }, { role: "user", content: "ok" }, { role: "user", content: "listo" }]), "solo cuentan los dos últimos mensajes del usuario");
 
+// ---- 4b. ¿Consulta de conocimiento? (más razonamiento, sin gastar solicitudes) --------------------------------
+const know = [
+  "¿Cuál es la capital de Australia?", "explícame qué es la inflación", "¿por qué el cielo es azul?", "diferencia entre IVA y monotributo",
+  "¿quién fue San Martín?", "cómo se dice 'gracias' en inglés", "¿cuántos habitantes tiene Brasil?", "¿es verdad que el ibuprofeno daña el riñón?",
+  "cómo hago un bucle en python", "¿cuánto mide el Aconcagua?", "puedes decirme cuánto tarda la luz del sol en llegar a la tierra?",
+];
+for (const m of know) ok(looksKnowledge(m) && needsDeepThinking(m), `debía ser de conocimiento: ${m}`);
+const notKnow = [
+  "mueve el dentista al viernes", "ponme una alarma a las 7:30", "¿qué tengo hoy?", "¿qué es lo que tengo mañana a la tarde?", "hola", "gracias",
+  "cancela la reunión del lunes", "¿cuándo es mi próxima reunión?", "¿lloverá mañana?", "léeme mi último correo", "¿a qué hora salgo para llegar a las 5?",
+  "avísale a Ana por WhatsApp que llego tarde", "ok", "dale", "", "   ",
+];
+for (const m of notKnow) ok(!looksKnowledge(m), `NO debía ser de conocimiento: ${m}`);
+ok(needsDeepThinking("¿y de Brasil?", [{ role: "user", content: "¿cuál es la capital de Australia?" }, { role: "assistant", content: "Canberra" }]), "el seguimiento de una pregunta de conocimiento mantiene el cuidado");
+
 // ---- 5. Prompt: reglas técnicas solo en consultas técnicas -------------------------------------------------
 const TZ = "America/Argentina/Buenos_Aires";
 const pT = systemPrompt(TZ, DEFAULT_SETTINGS, false, false, true);
 const pN = systemPrompt(TZ, DEFAULT_SETTINGS, false, false, false);
-for (const frag of ["Consultas técnicas", "no te niegues ni interrogues", "Presupuestos de oficios", "desperdicio", "Seguridad:", "hierro del 10", "nunca presentes como exacto"]) {
+for (const frag of ["Consultas técnicas", "no te niegues ni interrogues", "Presupuestos de oficios", "desperdicio", "Seguridad:", "hierro del 10", "nunca presentes como exacto", "Precisión:", "Antes de responder revisa", "Programación:"]) {
   ok(pT.includes(frag), `prompt técnico incluye: ${frag}`);
   ok(!pN.includes(frag), `prompt normal NO incluye: ${frag}`);
 }
@@ -132,6 +147,12 @@ const sys = (i = 0) => calls[i].body.systemInstruction.parts[0].text as string;
   ok(level() === "medium", "consulta técnica usa thinking medium: " + level());
   ok(sys().includes("Consultas técnicas"), "consulta técnica trae las reglas técnicas");
   ok(timeouts.includes(30_000), "consulta técnica: 30 s por intento: " + timeouts.join(","));
+
+  // a2) Pregunta general: también razona más y trae las reglas de precisión
+  reset(); script = [text("Canberra")];
+  await sendMessageToGemini({ ...base, message: "¿Cuál es la capital de Australia?" });
+  ok(level() === "medium" && sys().includes("Precisión:"), "pregunta general usa medium y reglas de precisión: " + level());
+  ok(calls.length === 1, "una pregunta general sigue gastando una sola solicitud");
 
   // b) Pedido de agenda: igual que siempre ("low", 15 s, sin reglas técnicas)
   reset(); script = [text("Hecho")];
