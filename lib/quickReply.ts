@@ -24,9 +24,9 @@ function normalize(raw: string): string {
     .trim();
 }
 
-const THANKS_REPLIES = ["¡De nada! Si necesitas algo más de tu agenda, aquí estoy.", "¡Con gusto! Avísame si hay algo más.", "¡A ti! Aquí estoy para lo que necesites."];
-const GREETING_REPLIES = ["¡Hola! Soy Frami, tu asistente de agenda. ¿En qué te ayudo?", "¡Hola! ¿Qué hacemos con tu agenda hoy?"];
-const FAREWELL_REPLIES = ["¡Hasta luego! Aquí estaré cuando me necesites.", "¡Nos vemos! Cuando quieras, seguimos con tu agenda."];
+const THANKS_REPLIES = ["¡De nada! Si necesitas algo más, aquí estoy.", "¡Con gusto! Avísame si hay algo más.", "¡A ti! Aquí estoy para lo que necesites."];
+const GREETING_REPLIES = ["¡Hola! Soy Frami, tu asistente. ¿En qué te ayudo?", "¡Hola! ¿En qué te ayudo hoy?"];
+const FAREWELL_REPLIES = ["¡Hasta luego! Aquí estaré cuando me necesites.", "¡Nos vemos! Cuando quieras, seguimos."];
 
 /** Texto de la respuesta local, o null si el mensaje debe ir al modelo. `pick` solo cambia en las pruebas. */
 export function quickReply(message: string, pick: (n: number) => number = (n) => Math.floor(Math.random() * n)): string | null {

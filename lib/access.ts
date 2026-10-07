@@ -76,6 +76,12 @@ const TOOL_APP: Record<string, { app: AppId; write: boolean }> = {
   open_didi: { app: "didi", write: true },
 };
 
+/**
+ * Herramientas generales: no tocan ninguna app del usuario (no leen ni escriben nada suyo), así que no se
+ * pueden restringir en Ajustes y siempre se declaran al modelo.
+ */
+export const GENERAL_TOOLS: readonly string[] = ["calculate"];
+
 /** Tipo de acción pendiente (pending_actions.type) -> app que toca. */
 const ACTION_APP: Record<string, AppId> = {
   create: "calendar",

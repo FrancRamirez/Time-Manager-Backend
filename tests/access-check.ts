@@ -1,5 +1,5 @@
 import { TOOLS, toolsFor, systemPrompt } from "../lib/gemini";
-import { toolAllowed, toolRestriction, parseAppAccess, DEFAULT_APP_ACCESS, restrictionRules, actionApp, appAllows } from "../lib/access";
+import { toolAllowed, toolRestriction, parseAppAccess, DEFAULT_APP_ACCESS, restrictionRules, actionApp, appAllows, GENERAL_TOOLS } from "../lib/access";
 import { parseSettings, DEFAULT_SETTINGS } from "../lib/schedule";
 
 let fails = 0;
@@ -7,13 +7,14 @@ const ok = (c: boolean, m: string) => { if (!c) { fails++; console.log("FALLA:",
 const names = TOOLS.flatMap((g) => g.functionDeclarations).map((d) => d.name);
 console.log("herramientas declaradas:", names.length);
 // Con TODO permitido deben declararse todas: una herramienta sin mapear quedaría permitida y la restricción no se aplicaría.
-ok(names.every((n) => toolRestriction({ calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked", maps: "blocked", didi: "blocked" }, n) !== null), "toda herramienta declarada debe estar mapeada a una app");
+ok(names.filter((n) => !GENERAL_TOOLS.includes(n)).every((n) => toolRestriction({ calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked", maps: "blocked", didi: "blocked" }, n) !== null), "toda herramienta declarada debe estar mapeada a una app");
 
 // 1. Ninguna herramienta declarada puede escaparse del mapa: con todo bloqueado no debe quedar ninguna.
 const allBlocked = { calendar: "blocked", gmail: "blocked", clock: "blocked", whatsapp: "blocked", sms: "blocked", calls: "blocked", forecast: "blocked", maps: "blocked", didi: "blocked" } as const;
 const left = (toolsFor(allBlocked)?.[0].functionDeclarations ?? []).map((d) => d.name);
-ok(left.length === 0, `con todo bloqueado quedan herramientas sin mapear: ${left.join(", ")}`);
-ok(toolsFor(allBlocked) === undefined, "con todo bloqueado no debe mandarse el campo tools");
+// Las herramientas generales (calculadora) no pertenecen a ninguna app: siempre se declaran, aunque todo esté bloqueado.
+ok(JSON.stringify(left.filter((n) => !GENERAL_TOOLS.includes(n))) === "[]", `con todo bloqueado quedan herramientas sin mapear: ${left.join(", ")}`);
+ok(JSON.stringify([...left].sort()) === JSON.stringify([...GENERAL_TOOLS].sort()), "con todo bloqueado solo quedan las herramientas generales");
 
 // 2. Todo permitido = las 16 de siempre.
 ok(toolsFor(DEFAULT_APP_ACCESS)![0].functionDeclarations.length === names.length, "por defecto deben declararse todas");
@@ -22,7 +23,7 @@ ok(toolsFor(DEFAULT_APP_ACCESS)![0].functionDeclarations.length === names.length
 const ro = { calendar: "read_only", gmail: "read_only", clock: "read_only", whatsapp: "allowed", sms: "allowed", calls: "allowed", forecast: "allowed", maps: "allowed", didi: "allowed" } as const;
 const roNames = toolsFor(ro)![0].functionDeclarations.map((d) => d.name).sort();
 console.log("solo lectura ->", roNames.join(", "));
-const expectRO = ["list_events","search_emails","read_email","list_alarms","compose_whatsapp","compose_sms","compose_call","get_forecast","search_place","get_directions","open_maps_route","open_didi"].sort();
+const expectRO = ["list_events","search_emails","read_email","list_alarms","compose_whatsapp","compose_sms","compose_call","get_forecast","search_place","get_directions","open_maps_route","open_didi", ...GENERAL_TOOLS].sort();
 ok(JSON.stringify(roNames) === JSON.stringify(expectRO), "solo lectura debe dejar exactamente las herramientas de lectura (+WhatsApp permitido)");
 
 // 4. Cada nivel por app, de forma aislada.

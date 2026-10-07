@@ -5,6 +5,7 @@ import { parseSettings } from "../../schedule";
 import { parseAlarms } from "../../clock";
 import { parseLocation, parseLocationReason } from "../../weather";
 import { quickReply } from "../../quickReply";
+import { parseImage } from "../../imageInput";
 import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../usage";
 
 const MAX_MESSAGE_CHARS = 2000;
@@ -29,16 +30,20 @@ export default route(["POST"], async (req, res) => {
   const userId = await requireUser(req);
 
   const body = bodyOf(req);
-  if (typeof body.message !== "string" || !body.message.trim()) {
+  // Imagen adjunta (opcional): se valida antes de gastar cupo. Puede viajar sin texto.
+  const image = parseImage(body.image);
+  const message = typeof body.message === "string" ? body.message : "";
+  if (!message.trim() && !image) {
     throw new HttpError(400, "Falta message");
   }
-  if (body.message.length > MAX_MESSAGE_CHARS) {
+  if (message.length > MAX_MESSAGE_CHARS) {
     throw new HttpError(400, "El mensaje es demasiado largo");
   }
 
   // Agradecimientos, saludos y despedidas se responden acá: no gastan cuota de IA ni cuentan en el cupo del
   // usuario (por eso van antes de revisar el límite: aunque lo haya agotado, un "gracias" no necesita al modelo).
-  const quick = quickReply(body.message);
+  // (Con una imagen adjunta siempre va al modelo: hay algo que mirar.)
+  const quick = image ? null : quickReply(message);
   if (quick !== null) {
     let usage: UsageSnapshot | undefined;
     try {
@@ -73,7 +78,8 @@ export default route(["POST"], async (req, res) => {
 
   const result = await sendMessageToGemini({
     userId,
-    message: body.message,
+    message,
+    image,
     history: parseHistory(body.history),
     timeZone: typeof body.timeZone === "string" ? body.timeZone : undefined,
     settings: parseSettings(body.settings),
