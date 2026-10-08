@@ -94,19 +94,19 @@ process.env.GEMINI_API_KEY = "test";
   const u2 = new URL(meteo()[0].url);
   ok(u2.searchParams.get("forecast_days") === "7" && !u2.searchParams.get("hourly"), "días limitados a 7 y sin horario");
 
-  // 5. Flujo del chat: sin ubicación -> se corta y se pide a la app
+  // 5. Flujo del chat: sin ubicación -> se pide a la app ANTES de llamar al modelo (IDEA 1: 0 solicitudes)
   const base = { userId: "u1", message: "¿Va a llover mañana?", timeZone: "America/Argentina/Buenos_Aires" };
-  reset(); geminiScript = [fnCall("get_forecast", { days: 2 })];
+  reset(); geminiScript = [];
   const r1 = await sendMessageToGemini(base);
   ok(r1.locationRequest === true, "pide ubicación");
-  ok(gemini().length === 1 && meteo().length === 0, "una sola llamada a Gemini y ninguna al clima");
+  ok(gemini().length === 0 && meteo().length === 0, "ninguna llamada a Gemini ni al clima");
 
-  // 6. Con ubicación -> consulta y responde
-  reset(); geminiScript = [fnCall("get_forecast", { days: 2, hours: 6 }), text("Mañana hay 80% de lluvia, 20 °C.")];
+  // 6. Con ubicación -> el servidor trae el pronóstico y el modelo responde en UNA sola solicitud
+  reset(); geminiScript = [text("Mañana hay 80% de lluvia, 20 °C.")];
   const r2 = await sendMessageToGemini({ ...base, location: { lat: -31.42, lon: -64.19 } });
   ok(!r2.locationRequest && r2.reply.content.includes("80%"), "responde con el pronóstico");
-  ok(meteo().length === 1 && gemini().length === 2, "una consulta al clima y dos a Gemini");
-  const toolMsg = JSON.stringify(gemini()[1].body.contents.at(-1));
+  ok(meteo().length === 1 && gemini().length === 1, "una consulta al clima y una sola a Gemini");
+  const toolMsg = JSON.stringify(gemini()[0].body.contents.at(-1));
   ok(toolMsg.includes("rain_chance_pct") && toolMsg.includes("Open-Meteo"), "el modelo recibe los datos compactados");
 
   // 7. Ubicación no disponible -> el modelo debe preguntar la ciudad
@@ -142,7 +142,7 @@ process.env.GEMINI_API_KEY = "test";
   // 8. Con ciudad no hace falta ubicación
   reset(); geoResults = [{ name: "Mendoza", latitude: -32.89, longitude: -68.83, country: "Argentina", admin1: "Mendoza" }];
   geminiScript = [fnCall("get_forecast", { city: "Mendoza" }), text("En Mendoza: soleado.")];
-  const r4 = await sendMessageToGemini(base);
+  const r4 = await sendMessageToGemini({ ...base, message: "¿Va a llover mañana en Mendoza?" });
   ok(!r4.locationRequest && meteo().length === 1, "con city consulta directo");
   ok(new URL(meteo()[0].url).searchParams.get("latitude") === "-32.89", "usa las coordenadas de la ciudad");
 

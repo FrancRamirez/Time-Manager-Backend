@@ -191,7 +191,9 @@ export async function callAltProvider(
   system: string,
   contents: GeminiContent[],
   tools: Parameters<typeof toOpenAiTools>[0],
-  deadline: number
+  deadline: number,
+  /** Cierre forzado: las herramientas siguen declaradas pero no se puede llamar a ninguna (tool_choice "none"). */
+  noTools = false
 ): Promise<GeminiResponse> {
   const remaining = deadline - Date.now();
   if (remaining < 1500) throw new AltProviderError("sin tiempo restante para el proveedor alternativo");
@@ -206,7 +208,7 @@ export async function callAltProvider(
       body: JSON.stringify({
         model: cfg.model,
         messages: toOpenAiMessages(system, contents),
-        ...(openAiTools ? { tools: openAiTools, tool_choice: "auto" } : {}),
+        ...(openAiTools ? { tools: openAiTools, tool_choice: noTools ? "none" : "auto" } : {}),
       }),
       signal: AbortSignal.timeout(Math.max(1000, Math.min(ALT_TIMEOUT_MS, remaining))),
     });

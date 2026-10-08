@@ -2,6 +2,7 @@ import { HttpError } from "./http";
 import { tfetch } from "./timing";
 import type { GoogleCalendarEvent } from "./google";
 import { DEFAULT_APP_ACCESS, parseAppAccess, type AppAccess } from "./access";
+import { DEFAULT_RESPONSE_LEVEL, parseResponseLevel, type ResponseLevel } from "./responseLevel";
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
@@ -24,6 +25,8 @@ export interface AssistantSettings {
   blockedHours: BlockedRange[];
   /** Qué puede tocar el asistente en cada app (Permitido / Solo lectura / Bloqueada). */
   appAccess: AppAccess;
+  /** Cuánto "trabaja" Frami por respuesta: Baja (1 solicitud a la IA), Media (hasta 3) o Alta (las necesarias, con tope). */
+  responseLevel: ResponseLevel;
 }
 
 export const DEFAULT_SETTINGS: AssistantSettings = {
@@ -32,6 +35,7 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   dailyActionLimit: 100,
   blockedHours: [],
   appAccess: DEFAULT_APP_ACCESS,
+  responseLevel: DEFAULT_RESPONSE_LEVEL,
 };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -75,6 +79,7 @@ export function parseSettings(raw: unknown): AssistantSettings {
     dailyActionLimit: clampInt(r.dailyActionLimit, 1, 500, 100),
     blockedHours,
     appAccess: parseAppAccess(r.appAccess),
+    responseLevel: parseResponseLevel(r.responseLevel),
   };
 }
 

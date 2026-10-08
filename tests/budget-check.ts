@@ -74,10 +74,10 @@ const suggestion = { ...DEFAULT_SETTINGS, autonomyLevel: "suggestion" as const }
   await sendMessageToGemini({ ...base, message: "¿Qué alarmas tengo?", settings: suggestion });
   ok(gem().length === 2, "dos consultas en la misma vuelta no suman vueltas");
 
-  // 8. Tope de vueltas: un modelo que no termina de consultar no gasta más de 4 solicitudes
-  reset(); geminiScript = Array.from({ length: 10 }, () => fnCalls(part("list_alarms")));
-  await sendMessageToGemini({ ...base, message: "¿Alarmas?", settings: suggestion });
-  ok(gem().length === 4, "tope de 4 vueltas: " + gem().length);
+  // 8. Tope de vueltas: un modelo que no termina de consultar no gasta más de 3 solicitudes (nivel Media, el predeterminado)
+  reset(); geminiScript = Array.from({ length: 10 }, () => fnCalls(part("get_directions", { destination: "x" })));
+  await sendMessageToGemini({ ...base, message: "¿Cómo llego?", settings: suggestion });
+  ok(gem().length === 3, "tope de 3 vueltas en Media: " + gem().length);
 
   // 9. El prompt pide agrupar consultas
   const prompt = systemPrompt(TZ, DEFAULT_SETTINGS, false);
