@@ -1,5 +1,5 @@
 import { route, bodyOf, HttpError } from "../../http";
-import { requireUser } from "../../auth";
+import { requireAccess } from "../../billing";
 import { query, exec } from "../../db";
 import { getGoogleAccessTokenForUser } from "../../tokens";
 import { executeAction } from "../../actions";
@@ -50,7 +50,7 @@ async function whyNotFound(actionId: string, userId: string): Promise<HttpError>
 }
 
 export default route(["POST"], async (req, res) => {
-  const userId = await requireUser(req);
+  const userId = await requireAccess(req);
 
   const body = bodyOf(req);
   // El id viaja en el cuerpo (/api/ai/confirm) o en la ruta (/api/ai/actions/:actionId/confirm).

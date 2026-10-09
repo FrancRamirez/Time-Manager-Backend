@@ -7,6 +7,7 @@
 // así que con muchos usuarios el barrido avanza por turnos sin pasarse del límite de la función.
 // ---------------------------------------------------------------------------
 
+import { entitledUserIds } from "./billing";
 import { query, exec } from "./db";
 import { HttpError } from "./http";
 import { scanUser, type ScanResult } from "./scan";
@@ -99,9 +100,12 @@ export async function runSweep(
       LIMIT ?`,
     [maxUsers]
   );
-  summary.selected = rows.length;
+  // Con el cobro encendido, las cuentas que deben pagar no se analizan (con el cobro apagado esto no hace nada).
+  const entitled = await entitledUserIds(rows.map((r) => r.user_id));
+  const eligible = rows.filter((r) => entitled.has(r.user_id));
+  summary.selected = eligible.length;
 
-  const queue = [...rows];
+  const queue = [...eligible];
   async function worker() {
     for (let row = queue.shift(); row; row = queue.shift()) {
       if (Date.now() - started > budgetMs) {

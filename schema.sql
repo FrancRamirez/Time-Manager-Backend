@@ -13,6 +13,12 @@ CREATE TABLE IF NOT EXISTS users (
   google_refresh_token_enc TEXT NOT NULL,
   onboarding_completed TINYINT(1) NOT NULL DEFAULT 0,
   subscription_active TINYINT(1) NOT NULL DEFAULT 0,
+  -- Cobro (ver lib/billing.ts). access_override: NULL | 'free' | 'trial' (trial vence en access_until, hora UTC).
+  access_override VARCHAR(10) NULL,
+  access_until DATE NULL,
+  subscription_expires_at DATETIME NULL,
+  play_onboarding_token TEXT NULL,
+  play_subscription_token TEXT NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY uq_users_google_sub (google_sub)

@@ -1,5 +1,5 @@
 import { route, bodyOf, HttpError } from "../../http";
-import { requireUser } from "../../auth";
+import { requireAccess } from "../../billing";
 import { sendMessageToGemini, type HistoryMessage } from "../../gemini";
 import { parseSettings } from "../../schedule";
 import { parseAlarms } from "../../clock";
@@ -27,7 +27,7 @@ function parseHistory(raw: unknown): HistoryMessage[] {
 }
 
 export default route(["POST"], async (req, res) => {
-  const userId = await requireUser(req);
+  const userId = await requireAccess(req);
 
   const body = bodyOf(req);
   // Imagen adjunta (opcional): se valida antes de gastar cupo. Puede viajar sin texto.
