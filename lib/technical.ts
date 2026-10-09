@@ -16,7 +16,7 @@ const norm = (s: string) =>
 
 /** Palabras que por sí solas marcan una consulta de cálculo, ciencia o de oficio/construcción. */
 const STRONG =
-  /\b(calcul\w*|presupuest\w*|formula\w*|ecuacion\w*|convert\w*|conversion|porcentaje|porciento|area|volumen|superficie|perimetro|hipotenusa|derivad\w*|integral\w*|raiz cuadrada|regla de tres|promedio|probabilidad|despej\w*|resolv\w*|resuelv\w*|factoriz\w*|trigonometr\w*|pitagoras|densidad|caudal|torque|amperaje|soldadur\w*|herreri\w*|hierro|varilla|planchuela|chapa|cano estructural|ladrillo\w*|hormigon|cemento|cableado|kva|kw)\b/;
+  /\b(calcul\w*|presupuest\w*|formula\w*|ecuacion\w*|convert\w*|conversion|porcentaje|porciento|area|volumen|superficie|perimetro|hipotenusa|derivad\w*|integral\w*|raiz cuadrada|regla de tres|promedio|probabilidad|despej\w*|resolv\w*|resuelv\w*|factoriz\w*|trigonometr\w*|pitagoras|densidad|caudal|torque|amperaje|contab\w*|amortizacion\w*|asiento contable|balance general|flujo de caja|punto de equilibrio|markup|interes compuesto|iva|soldadur\w*|herreri\w*|hierro|varilla|planchuela|chapa|cano estructural|ladrillo\w*|hormigon|cemento|cableado|kva|kw)\b/;
 
 /** Palabras de cantidad o precio: cuentan como técnicas solo si el mensaje trae algún número. */
 const WEAK = /\b(cuanto|cuantos|cuanta|cuantas|vale|cuesta|pesa|pesan|mide|miden|rinde|lleva|necesito)\b/;

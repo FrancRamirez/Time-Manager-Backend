@@ -113,7 +113,7 @@ ok(pT.includes("Consultas generales:") && pT.includes("Formato:") && pT.includes
 const declared = (access: any) => (toolsFor(access)?.[0].functionDeclarations ?? []).map((d) => d.name);
 ok(declared(DEFAULT_APP_ACCESS).includes("calculate"), "calculate se declara por defecto");
 const allBlocked: any = Object.fromEntries(Object.keys(DEFAULT_APP_ACCESS).map((k) => [k, "blocked"]));
-ok(JSON.stringify(declared(allBlocked)) === '["calculate"]', "con todo bloqueado igual queda la calculadora");
+ok(JSON.stringify(declared(allBlocked)) === '["calculate","get_exchange_rates"]', "con todo bloqueado quedan las herramientas generales (calculadora y cotizaciones)");
 const calcDecl = (toolsFor(DEFAULT_APP_ACCESS)![0].functionDeclarations as any[]).find((d) => d.name === "calculate");
 ok(calcDecl.parameters.required[0] === "expressions" && calcDecl.parameters.properties.expressions.items.required[0] === "expression", "esquema de calculate");
 
@@ -194,7 +194,7 @@ const sys = (i = 0) => calls[i].body.systemInstruction.parts[0].text as string;
   script = [fnCall("calculate", { expressions: [{ expression: "2 + 2" }] }), text("Son 4.")];
   const blocked = await sendMessageToGemini({ ...base, message: "calcula 2 + 2", settings: { ...base.settings, appAccess: allBlocked } });
   ok(blocked.reply.content === "Son 4." && calls[1].body.contents.at(-1).parts[0].functionResponse.response.results[0].value === 4, "calculate funciona con todo bloqueado");
-  ok((calls[0].body.tools?.[0].functionDeclarations ?? []).map((d: any) => d.name).join() === "calculate", "con todo bloqueado solo se declara calculate");
+  ok((calls[0].body.tools?.[0].functionDeclarations ?? []).map((d: any) => d.name).join() === "calculate,get_exchange_rates", "con todo bloqueado solo se declaran las herramientas generales");
 
   // g) Un pedido mal formado no rompe el chat: el modelo recibe el error y puede corregir
   reset();

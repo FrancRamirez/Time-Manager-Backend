@@ -13,6 +13,7 @@
 // El servidor hace cumplir el nivel (no el prompt): el modelo solo recibe las herramientas que el nivel permite.
 
 import { looksTechnical } from "./technical";
+import { parseFinanceRequest, type FinanceRequest } from "./financeText";
 
 export type ResponseLevel = "low" | "medium" | "high";
 
@@ -61,6 +62,8 @@ export const LOW_EXCLUDED_TOOLS: ReadonlySet<string> = new Set([
   "search_place",
   "get_directions",
   "calculate",
+  // Las cotizaciones se piden por texto y llegan pre-cargadas (0 solicitudes extra): en Baja no hace falta la herramienta.
+  "get_exchange_rates",
 ]);
 
 /** ¿Este nivel permite declarar (y ejecutar) la herramienta? Segunda capa: runTool también lo consulta. */
@@ -161,6 +164,8 @@ export interface PreloadPlan {
    * llamar al modelo (0 solicitudes). La app obtiene la ubicación y reenvía el mismo mensaje.
    */
   weatherNeedsLocation: boolean;
+  /** Cotización o conversión de monedas pedida en el mensaje (se trae antes de llamar al modelo). */
+  finance: FinanceRequest | null;
 }
 
 export interface PlanInput {
@@ -178,7 +183,7 @@ function agendaDaysFor(n: string): number {
 }
 
 export function planPreload(input: PlanInput): PreloadPlan {
-  const plan: PreloadPlan = { agendaDays: null, alarms: false, weather: null, weatherNeedsLocation: false };
+  const plan: PreloadPlan = { agendaDays: null, alarms: false, weather: null, weatherNeedsLocation: false, finance: null };
   if (typeof input.message !== "string" || !input.message.trim()) return plan;
   const n = norm(input.message);
 
@@ -188,10 +193,14 @@ export function planPreload(input: PlanInput): PreloadPlan {
   // Una cuenta o una consulta técnica ("a qué temperatura funde el acero") no es del clima aunque comparta palabras.
   const isWeather = WEATHER.test(n) && !NOT_WEATHER.test(n) && !looksTechnical(input.message);
   const hasAgendaNoun = AGENDA_NOUNS.test(n);
-  const hasAgendaVerb = AGENDA_VERBS.test(n) && !OTHER_APPS.test(n);
+  // Dólar, euro, conversiones: las cotizaciones se traen en paralelo y no gastan solicitudes a la IA.
+  // "pásame 100 dólares a pesos" no es mover un evento: con una consulta de monedas los verbos de mover no cuentan.
+  plan.finance = parseFinanceRequest(input.message);
+  const hasAgendaVerb = AGENDA_VERBS.test(n) && !OTHER_APPS.test(n) && !plan.finance;
   if (hasAgendaNoun || hasAgendaVerb) plan.agendaDays = agendaDaysFor(n);
 
   if (ALARM_WORDS.test(n)) plan.alarms = true;
+
 
   if (isWeather) {
     // Con una ciudad nombrada, o con duda, lo decide el modelo (usa city). Sin eso, es el clima del usuario.
@@ -230,6 +239,7 @@ export interface PreloadParts {
   agenda?: { timezone?: string; days: number; events: { id: string; title: string; start: string; end: string; all_day: boolean; location?: string }[] } | { error: string };
   alarms?: { id: string; time: string; repeats?: string; label?: string }[];
   weather?: unknown;
+  finance?: unknown;
 }
 
 /** Arma el texto que se agrega a continuación del mensaje del usuario (en la misma solicitud). */
@@ -266,6 +276,13 @@ export function buildPreloadBlock(parts: PreloadParts): string {
   if (parts.weather !== undefined) {
     lines.push("PRONÓSTICO PRE-CARGADO del lugar donde está el usuario (JSON):");
     lines.push(JSON.stringify(parts.weather).slice(0, 6000));
+  }
+
+  if (parts.finance !== undefined) {
+    lines.push(
+      "COTIZACIONES EN TIEMPO REAL (JSON de dolarapi.com y Frankfurter/Banco Central Europeo). Si trae `conversions`, son cuentas ya hechas por el servidor: úsalas tal cual, sin recalcular:"
+    );
+    lines.push(JSON.stringify(parts.finance).slice(0, 6000));
   }
 
   lines.push(PRELOAD_CLOSE);
