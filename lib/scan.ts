@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { query, exec } from "./db";
 import { getGoogleAccessTokenForUser } from "./tokens";
 import { patchCalendarEvent } from "./google";
+import { tr } from "./lang";
 import {
   listEventsBetween,
   localToUtcMs,
@@ -166,7 +167,10 @@ export async function scanUser(opts: {
         break; // los movimientos siguientes dependían del orden: se frena acá
       }
 
-      const description = `"${m.title}" pasó de ${formatWhen(m.from.start, tz)} a ${formatWhen(m.to.start, tz)} (${m.detail})`;
+      const description = tr(
+        `"${m.title}" pasó de ${formatWhen(m.from.start, tz)} a ${formatWhen(m.to.start, tz)} (${m.detail})`,
+        `"${m.title}" moved from ${formatWhen(m.from.start, tz)} to ${formatWhen(m.to.start, tz)} (${m.detail})`
+      );
       await exec(
         `INSERT INTO pending_actions (id, user_id, type, description, payload, status)
          VALUES (?, ?, 'reschedule', ?, ?, 'auto_done')`,

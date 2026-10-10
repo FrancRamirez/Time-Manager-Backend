@@ -1,4 +1,5 @@
-// ---------------------------------------------------------------------------
+
+import { tr } from "./lang";// ---------------------------------------------------------------------------
 // WhatsApp (por enlaces wa.me / whatsapp://send)
 //
 // No existe API para leer, enviar ni modificar chats personales. Lo único
@@ -49,9 +50,12 @@ export function cleanWhatsappMessage(v: unknown): string | null {
 
 export function describeWhatsapp(b: WhatsappBody): string {
   const dest = b.contactName
-    ? `para ${b.contactName}`
+    ? tr(`para ${b.contactName}`, `for ${b.contactName}`)
     : b.phone
-      ? `para +${b.phone}`
-      : "(elegirás el contacto en WhatsApp)";
-  return `Abrir WhatsApp con este mensaje ${dest}:\n"${b.message}"\nTú decides si lo envías.`;
+      ? tr(`para +${b.phone}`, `for +${b.phone}`)
+      : tr("(elegirás el contacto en WhatsApp)", "(you'll choose the contact in WhatsApp)");
+  return tr(
+    `Abrir WhatsApp con este mensaje ${dest}:\n"${b.message}"\nTú decides si lo envías.`,
+    `Open WhatsApp with this message ${dest}:\n"${b.message}"\nYou decide whether to send it.`
+  );
 }

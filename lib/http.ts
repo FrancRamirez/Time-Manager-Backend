@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { logPerf, runWithTiming, type TimingContext } from "./timing";
+import { parseLang, runWithLang, tr } from "./lang";
 
 export class HttpError extends Error {
   /** `extra` se incluye tal cual en el JSON de la respuesta (ej. code, retryAfterSeconds). */
@@ -31,11 +32,15 @@ export function route(methods: string[], handler: Handler) {
   return async (req: VercelRequest, res: VercelResponse) => {
     const ctx: TimingContext = new Map();
     const t0 = performance.now();
-    await runWithTiming(ctx, async () => {
+    // Idioma de la app: encabezado X-App-Language o, si no viene, settings.language del cuerpo.
+    const header = req.headers?.["x-app-language"];
+    const bodySettings = bodyOf(req).settings as Record<string, unknown> | undefined;
+    const lang = parseLang(Array.isArray(header) ? header[0] : header ?? bodySettings?.language);
+    await runWithLang(lang, () => runWithTiming(ctx, async () => {
       try {
         if (!methods.includes(req.method ?? "")) {
           res.setHeader("Allow", methods.join(", "));
-          throw new HttpError(405, "Método no permitido");
+          throw new HttpError(405, tr("Método no permitido", "Method not allowed"));
         }
         await handler(req, res);
       } catch (err) {
@@ -45,7 +50,7 @@ export function route(methods: string[], handler: Handler) {
           res.status(err.status).json({ error: err.message, ...err.extra });
         } else {
           console.error(err);
-          res.status(500).json({ error: "Error interno del servidor", code: "server_error" });
+          res.status(500).json({ error: tr("Error interno del servidor", "Internal server error"), code: "server_error" });
         }
       } finally {
         logPerf({
@@ -56,7 +61,7 @@ export function route(methods: string[], handler: Handler) {
           ctx,
         });
       }
-    });
+    }));
   };
 }
 

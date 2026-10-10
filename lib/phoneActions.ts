@@ -8,6 +8,7 @@
 // ---------------------------------------------------------------------------
 
 import { cleanContactName } from "./whatsapp";
+import { tr } from "./lang";
 
 export interface SmsBody {
   kind: "sms_send";
@@ -52,16 +53,22 @@ export { cleanContactName };
 
 export function describeSms(b: SmsBody): string {
   const dest = b.contactName
-    ? `para ${b.contactName}${b.phone ? ` (${b.phone})` : ""}`
+    ? tr(`para ${b.contactName}${b.phone ? ` (${b.phone})` : ""}`, `for ${b.contactName}${b.phone ? ` (${b.phone})` : ""}`)
     : b.phone
-      ? `para ${b.phone}`
-      : "(elegirás el contacto en tu app de mensajes)";
-  return `Abrir tu app de mensajes con este SMS ${dest}:\n"${b.message}"\nTú decides si lo envías.`;
+      ? tr(`para ${b.phone}`, `for ${b.phone}`)
+      : tr("(elegirás el contacto en tu app de mensajes)", "(you'll choose the contact in your messaging app)");
+  return tr(
+    `Abrir tu app de mensajes con este SMS ${dest}:\n"${b.message}"\nTú decides si lo envías.`,
+    `Open your messaging app with this text ${dest}:\n"${b.message}"\nYou decide whether to send it.`
+  );
 }
 
 export function describeCall(b: CallBody): string {
   const dest = b.contactName
     ? `${b.contactName}${b.phone ? ` (${b.phone})` : ""}`
     : (b.phone ?? "");
-  return `Abrir el marcador con el número de ${dest}. Tú pulsas Llamar: no se llama solo.`;
+  return tr(
+    `Abrir el marcador con el número de ${dest}. Tú pulsas Llamar: no se llama solo.`,
+    `Open the dialer with ${dest}'s number. You tap Call: it doesn't call by itself.`
+  );
 }

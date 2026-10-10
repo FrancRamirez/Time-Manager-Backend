@@ -3,6 +3,7 @@ import { tfetch } from "./timing";
 import type { GoogleCalendarEvent } from "./google";
 import { DEFAULT_APP_ACCESS, parseAppAccess, type AppAccess } from "./access";
 import { DEFAULT_RESPONSE_LEVEL, parseResponseLevel, type ResponseLevel } from "./responseLevel";
+import { currentLang, parseLang, type Lang } from "./lang";
 
 const CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 
@@ -27,6 +28,8 @@ export interface AssistantSettings {
   appAccess: AppAccess;
   /** Cuánto "trabaja" Frami por respuesta: Baja (1 solicitud a la IA), Media (hasta 3) o Alta (las necesarias, con tope). */
   responseLevel: ResponseLevel;
+  /** Idioma de la app: los avisos con la app cerrada y las respuestas usan este idioma. */
+  language: Lang;
 }
 
 export const DEFAULT_SETTINGS: AssistantSettings = {
@@ -36,6 +39,7 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   blockedHours: [],
   appAccess: DEFAULT_APP_ACCESS,
   responseLevel: DEFAULT_RESPONSE_LEVEL,
+  language: "es",
 };
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -80,6 +84,7 @@ export function parseSettings(raw: unknown): AssistantSettings {
     blockedHours,
     appAccess: parseAppAccess(r.appAccess),
     responseLevel: parseResponseLevel(r.responseLevel),
+    language: parseLang(r.language),
   };
 }
 
@@ -271,15 +276,16 @@ export function slotBlockers(
   return out;
 }
 
-/** "vie 2 oct, 15:45" en la zona del usuario. */
+/** "vie 2 oct, 15:45" (o "Fri, Oct 2, 3:45 PM" en inglés) en la zona del usuario. */
 export function formatWhen(ms: number, tz: string): string {
-  return new Intl.DateTimeFormat("es", {
+  const en = currentLang() === "en";
+  return new Intl.DateTimeFormat(en ? "en-US" : "es", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hour12: en,
     timeZone: tz,
   }).format(new Date(ms));
 }

@@ -5,6 +5,7 @@ import { getGoogleAccessTokenForUser } from "../../tokens";
 import { executeAction } from "../../actions";
 import { actionApp, appAllows, restrictionText } from "../../access";
 import { parseSettings } from "../../schedule";
+import { tr } from "../../lang";
 
 interface PendingActionRow {
   id: string;
@@ -29,13 +30,13 @@ async function whyNotFound(actionId: string, userId: string): Promise<HttpError>
 
   if (!row || Number(row.mine) !== 1) {
     console.error("confirm 404: la acción no existe para este usuario", { actionId });
-    return new HttpError(404, "No encontré esa acción. Pídesela de nuevo a Frami.", {
+    return new HttpError(404, tr("No encontré esa acción. Pídesela de nuevo a Frami.", "I couldn't find that action. Ask Frami again."), {
       code: "action_not_found",
     });
   }
   if (row.status === "pending" && Number(row.expired) === 1) {
     console.error("confirm 404: la acción venció", { actionId });
-    return new HttpError(404, "Esta acción venció (duran una hora). Pídesela de nuevo a Frami.", {
+    return new HttpError(404, tr("Esta acción venció (duran una hora). Pídesela de nuevo a Frami.", "This action expired (they last one hour). Ask Frami again."), {
       code: "action_expired",
     });
   }
@@ -43,8 +44,8 @@ async function whyNotFound(actionId: string, userId: string): Promise<HttpError>
   return new HttpError(
     409,
     row.status === "failed"
-      ? "Esta acción falló antes y ya no se puede reintentar. Pídesela de nuevo a Frami."
-      : "Esta acción ya se había resuelto. Revisa tu agenda: puede que ya esté lista.",
+      ? tr("Esta acción falló antes y ya no se puede reintentar. Pídesela de nuevo a Frami.", "This action failed before and can't be retried. Ask Frami again.")
+      : tr("Esta acción ya se había resuelto. Revisa tu agenda: puede que ya esté lista.", "This action was already resolved. Check your schedule: it may already be done."),
     { code: "action_resolved", status: row.status }
   );
 }
@@ -98,7 +99,7 @@ export default route(["POST"], async (req, res) => {
     [action.id]
   );
   if (claim.affectedRows !== 1) {
-    throw new HttpError(409, "Esta acción ya se había resuelto. Revisa tu agenda: puede que ya esté lista.", {
+    throw new HttpError(409, tr("Esta acción ya se había resuelto. Revisa tu agenda: puede que ya esté lista.", "This action was already resolved. Check your schedule: it may already be done."), {
       code: "action_resolved",
     });
   }
@@ -133,7 +134,7 @@ export default route(["POST"], async (req, res) => {
       });
     }
     console.error("Confirmar acción falló:", err);
-    throw new HttpError(503, "No pude completar la acción en este momento. Prueba de nuevo.", {
+    throw new HttpError(503, tr("No pude completar la acción en este momento. Prueba de nuevo.", "I couldn't complete the action right now. Please try again."), {
       code: "action_failed",
       retryable: true,
     });

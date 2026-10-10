@@ -13,6 +13,7 @@
 
 import { tfetch } from "./timing";
 import type { Coords } from "./weather";
+import { tr } from "./lang";
 
 const ROUTES_URL = "https://routes.googleapis.com/directions/v2:computeRoutes";
 const PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
@@ -26,6 +27,13 @@ export const MODE_LABEL: Record<TravelMode, string> = {
   walk: "a pie",
   bicycle: "en bicicleta",
   transit: "en transporte público",
+};
+
+const MODE_LABEL_EN: Record<TravelMode, string> = {
+  drive: "by car",
+  walk: "on foot",
+  bicycle: "by bike",
+  transit: "by public transport",
 };
 
 const GOOGLE_MODE: Record<TravelMode, string> = {
@@ -337,11 +345,17 @@ export interface MapsBody {
 
 export function describeMaps(b: MapsBody): string {
   if (b.open_with === "any") {
-    return `Abrir tu app de mapas con el destino "${b.destination}". Tú decides si inicias la navegación.`;
+    return tr(
+      `Abrir tu app de mapas con el destino "${b.destination}". Tú decides si inicias la navegación.`,
+      `Open your maps app with the destination "${b.destination}". You decide whether to start navigation.`
+    );
   }
-  return (
+  return tr(
     `Abrir Google Maps con la ruta ${MODE_LABEL[b.mode]} hasta "${b.destination}"` +
-    (b.origin ? ` desde "${b.origin}"` : " desde tu ubicación") +
-    ". Tú decides si inicias la navegación."
+      (b.origin ? ` desde "${b.origin}"` : " desde tu ubicación") +
+      ". Tú decides si inicias la navegación.",
+    `Open Google Maps with the route ${MODE_LABEL_EN[b.mode]} to "${b.destination}"` +
+      (b.origin ? ` from "${b.origin}"` : " from your location") +
+      ". You decide whether to start navigation."
   );
 }

@@ -7,6 +7,7 @@ import { parseLocation, parseLocationReason } from "../../weather";
 import { quickReply } from "../../quickReply";
 import { parseImage } from "../../imageInput";
 import { messagesUsedToday, recordMessage, snapshot, type UsageSnapshot } from "../../usage";
+import { tr } from "../../lang";
 
 const MAX_MESSAGE_CHARS = 2000;
 const MAX_HISTORY = 12;
@@ -34,10 +35,10 @@ export default route(["POST"], async (req, res) => {
   const image = parseImage(body.image);
   const message = typeof body.message === "string" ? body.message : "";
   if (!message.trim() && !image) {
-    throw new HttpError(400, "Falta message");
+    throw new HttpError(400, tr("Falta message", "Missing message"));
   }
   if (message.length > MAX_MESSAGE_CHARS) {
-    throw new HttpError(400, "El mensaje es demasiado largo");
+    throw new HttpError(400, tr("El mensaje es demasiado largo", "The message is too long"));
   }
 
   // Agradecimientos, saludos y despedidas se responden acá: no gastan cuota de IA ni cuentan en el cupo del
@@ -68,7 +69,7 @@ export default route(["POST"], async (req, res) => {
   if (used !== null) {
     const usage = snapshot(used);
     if (usage.limit > 0 && usage.used >= usage.limit) {
-      throw new HttpError(429, "Llegaste al límite de mensajes de hoy.", {
+      throw new HttpError(429, tr("Llegaste al límite de mensajes de hoy.", "You reached today's message limit."), {
         code: "user_limit",
         retryAfterSeconds: usage.resetsInSeconds,
         usage,

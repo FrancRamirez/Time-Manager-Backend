@@ -1,6 +1,7 @@
 import { HttpError } from "./http";
 import { tfetch } from "./timing";
 import { utcMsToLocal } from "./schedule";
+import { tr } from "./lang";
 
 // ---------------------------------------------------------------------------
 // Gmail API (REST). Permiso necesario: gmail.modify (leer, redactar, enviar,
@@ -394,6 +395,19 @@ export const MODIFY_ACTIONS = {
 } as const satisfies Record<string, { label: string; add: readonly string[]; remove: readonly string[] }>;
 
 export type ModifyAction = keyof typeof MODIFY_ACTIONS;
+
+const MODIFY_LABEL_EN: Record<ModifyAction, string> = {
+  archive: "Archive",
+  mark_read: "Mark as read",
+  mark_unread: "Mark as unread",
+  star: "Star",
+  unstar: "Remove the star from",
+};
+
+/** Etiqueta de la acción en el idioma de la solicitud. */
+export function modifyActionLabel(key: ModifyAction): string {
+  return tr(MODIFY_ACTIONS[key].label, MODIFY_LABEL_EN[key]);
+}
 
 export async function modifyLabels(
   token: string,

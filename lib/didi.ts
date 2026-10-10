@@ -11,6 +11,7 @@
 // El servidor solo valida y arma la acción. Los destinos no se guardan ni se registran en logs.
 
 import { cleanPlaceText } from "./maps";
+import { tr } from "./lang";
 
 export interface DidiBody {
   kind: "didi_open";
@@ -23,7 +24,14 @@ export const cleanDidiDestination = cleanPlaceText;
 
 export function describeDidi(b: DidiBody): string {
   return b.destination
-    ? `Abrir DiDi y copiar el destino "${b.destination}" para que lo pegues en "¿A dónde vas?". ` +
-        "Tú eliges el viaje, ves la tarifa y lo pides: no se pide solo."
-    : "Abrir DiDi. Tú eliges el destino y el viaje, y ves la tarifa: no se pide nada solo.";
+    ? tr(
+        `Abrir DiDi y copiar el destino "${b.destination}" para que lo pegues en "¿A dónde vas?". ` +
+          "Tú eliges el viaje, ves la tarifa y lo pides: no se pide solo.",
+        `Open DiDi and copy the destination "${b.destination}" so you can paste it into "Where to?". ` +
+          "You choose the ride, see the fare and request it: nothing is requested automatically."
+      )
+    : tr(
+        "Abrir DiDi. Tú eliges el destino y el viaje, y ves la tarifa: no se pide nada solo.",
+        "Open DiDi. You choose the destination and the ride, and you see the fare: nothing is requested automatically."
+      );
 }

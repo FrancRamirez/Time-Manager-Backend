@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { tr } from "./lang";
 import {
   blockedOverlaps,
   formatWhen,
@@ -255,8 +256,8 @@ export function planSuggestions(input: {
 
       const detail =
         c.kind === "overlap"
-          ? `se superpone con "${other.title}"`
-          : `queda a menos de ${settings.bufferMinutes} min de "${other.title}"`;
+          ? tr(`se superpone con "${other.title}"`, `overlaps with "${other.title}"`)
+          : tr(`queda a menos de ${settings.bufferMinutes} min de "${other.title}"`, `is less than ${settings.bufferMinutes} min from "${other.title}"`);
 
       moves.push({
         eventId: e.id,
@@ -264,7 +265,10 @@ export function planSuggestions(input: {
         from: { start: e.start, end: e.end },
         to: slot,
         conflictWith: { id: other.id, title: other.title, kind: c.kind },
-        reason: `Mover "${e.title}" de ${formatWhen(e.start, tz)} a ${formatWhen(slot.start, tz)}: ${detail}.`,
+        reason: tr(
+          `Mover "${e.title}" de ${formatWhen(e.start, tz)} a ${formatWhen(slot.start, tz)}: ${detail}.`,
+          `Move "${e.title}" from ${formatWhen(e.start, tz)} to ${formatWhen(slot.start, tz)}: ${detail}.`
+        ),
         detail,
         autoSafe: !e.hasGuests && !e.recurring,
       });

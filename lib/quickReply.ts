@@ -24,6 +24,14 @@ function normalize(raw: string): string {
     .trim();
 }
 
+// Inglés
+const THANKS_EN = /^(?:(?:ok|okay|great|perfect|awesome)\s+)?(?:(?:thanks|thank you|thx|ty)(?:\s+(?:so much|a lot|very much|a ton))?)(?:\s+(?:frami|for everything))?$/;
+const GREETING_EN = /^(?:hi|hello|hey|hiya|howdy|good morning|good afternoon|good evening)(?:\s+(?:there|frami))?$/;
+const FAREWELL_EN = /^(?:bye|goodbye|good bye|see you|see you later|see ya|talk to you later|good night)(?:\s+frami)?$/;
+const THANKS_REPLIES_EN = ["You're welcome! If you need anything else, I'm here.", "My pleasure! Let me know if there's anything else.", "Anytime! I'm here whenever you need me."];
+const GREETING_REPLIES_EN = ["Hi! I'm Frami, your assistant. How can I help?", "Hi! How can I help you today?"];
+const FAREWELL_REPLIES_EN = ["See you later! I'll be here when you need me.", "Bye! We can pick up whenever you like."];
+
 const THANKS_REPLIES = ["¡De nada! Si necesitas algo más, aquí estoy.", "¡Con gusto! Avísame si hay algo más.", "¡A ti! Aquí estoy para lo que necesites."];
 const GREETING_REPLIES = ["¡Hola! Soy Frami, tu asistente. ¿En qué te ayudo?", "¡Hola! ¿En qué te ayudo hoy?"];
 const FAREWELL_REPLIES = ["¡Hasta luego! Aquí estaré cuando me necesites.", "¡Nos vemos! Cuando quieras, seguimos."];
@@ -37,5 +45,9 @@ export function quickReply(message: string, pick: (n: number) => number = (n) =>
   if (THANKS.test(m)) return choose(THANKS_REPLIES);
   if (GREETING.test(m)) return choose(GREETING_REPLIES);
   if (FAREWELL.test(m)) return choose(FAREWELL_REPLIES);
+  // En inglés se responde en inglés (según lo que escribió la persona).
+  if (THANKS_EN.test(m)) return choose(THANKS_REPLIES_EN);
+  if (GREETING_EN.test(m)) return choose(GREETING_REPLIES_EN);
+  if (FAREWELL_EN.test(m)) return choose(FAREWELL_REPLIES_EN);
   return null;
 }

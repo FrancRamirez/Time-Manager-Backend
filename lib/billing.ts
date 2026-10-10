@@ -18,6 +18,7 @@ import type { VercelRequest } from "@vercel/node";
 import { HttpError } from "./http";
 import { requireUser } from "./auth";
 import { query } from "./db";
+import { tr } from "./lang";
 
 export type Access = "open" | "free" | "trial" | "paid" | "payment_required";
 
@@ -122,9 +123,9 @@ export async function requireAccess(req: VercelRequest): Promise<string> {
   if (!billingEnabled()) return userId;
 
   const rows = await query<AccessRow>("SELECT * FROM users WHERE id = ?", [userId]);
-  if (!rows[0]) throw new HttpError(401, "Sesión no válida", { code: "session_expired" });
+  if (!rows[0]) throw new HttpError(401, tr("Sesión no válida", "Invalid session"), { code: "session_expired" });
   if (computeAccess(rows[0]).paywall) {
-    throw new HttpError(402, "Para seguir usando el asistente, activa tu cuenta.", { code: "payment_required" });
+    throw new HttpError(402, tr("Para seguir usando el asistente, activa tu cuenta.", "To keep using the assistant, activate your account."), { code: "payment_required" });
   }
   return userId;
 }

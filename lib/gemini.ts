@@ -8,6 +8,7 @@ import { runExchangeRates, runFinancePreload } from "./finance";
 import { needsDeepThinking } from "./technical";
 import {
   LOW_NEEDS_MORE_STEPS,
+  lowNeedsMoreStepsText,
   buildPreloadBlock,
   callSignature,
   forecastTemplate,
@@ -45,6 +46,7 @@ import {
 } from "./maps";
 import { findPlaces, openWith, routeBetween } from "./mapsProvider";
 import { cleanDidiDestination, describeDidi, type DidiBody } from "./didi";
+import { currentLang, langName, tr } from "./lang";
 import {
   describeLocationFailure,
   type LocationReason,
@@ -76,6 +78,7 @@ import {
   MAX_RECIPIENTS,
   MAX_SUBJECT,
   MODIFY_ACTIONS,
+  modifyActionLabel,
   cleanMessageIds,
   clip,
   getEmail,
@@ -915,13 +918,13 @@ function normalizeLocal(value: unknown): string | null {
 }
 
 const HUMAN_FMT = (timeZone: string) =>
-  new Intl.DateTimeFormat("es", {
+  new Intl.DateTimeFormat(currentLang() === "en" ? "en-US" : "es", {
     weekday: "short",
     day: "numeric",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
+    hour12: currentLang() === "en",
     timeZone,
   });
 
@@ -934,12 +937,14 @@ function formatLocal(naive: string): string {
 function formatInstant(value: { dateTime?: string; date?: string }, tz: string): string {
   if (value.dateTime) return HUMAN_FMT(tz).format(new Date(value.dateTime));
   if (value.date) {
-    return new Intl.DateTimeFormat("es", {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    }).format(new Date(value.date + "T00:00:00Z")) + " (todo el día)";
+    return (
+      new Intl.DateTimeFormat(currentLang() === "en" ? "en-US" : "es", {
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        timeZone: "UTC",
+      }).format(new Date(value.date + "T00:00:00Z")) + tr(" (todo el día)", " (all day)")
+    );
   }
   return "?";
 }
@@ -1054,7 +1059,9 @@ export function systemPrompt(
         ]
       : []),
     ...restrictionRules(settings.appAccess),
-    "- Responde en español neutro, breve y directo.",
+    currentLang() === "en"
+      ? "- IDIOMA: responde en inglés (English), breve y directo: es el idioma elegido en la app. Si el usuario te escribe en español u otro idioma, responde en el idioma en que te escribió. Los textos que ves en español (herramientas, descripciones) son internos: tradúcelos al responder."
+      : "- Responde en español neutro, breve y directo. Si el usuario te escribe en inglés u otro idioma, responde en ese idioma.",
     // La personalidad va al final y NUNCA anula las reglas de seguridad ni las confirmaciones de arriba.
     "Personalidad (solo afecta al tono; nunca cambia las reglas anteriores):",
     "- Eres Frami: cercano, amable y directo; cálido pero breve; con un humor muy ligero y ocasional. Usa como máximo un emoji, y solo si el usuario los usa.",
@@ -1330,8 +1337,8 @@ function slotProblem(
     const detail = check.conflicts
       .map((c) =>
         c.kind === "overlap"
-          ? `se superpone con "${c.title}"`
-          : `queda a menos de ${ctx.settings.bufferMinutes} min de "${c.title}"`
+          ? tr(`se superpone con "${c.title}"`, `overlaps with "${c.title}"`)
+          : tr(`queda a menos de ${ctx.settings.bufferMinutes} min de "${c.title}"`, `is less than ${ctx.settings.bufferMinutes} min from "${c.title}"`)
       )
       .join(", ");
     if (!allowConflicts) {
@@ -1411,9 +1418,9 @@ async function prepareEmail(
     references,
   };
   const summary = [
-    `Para: ${mail.to.join(", ")}`,
+    `${tr("Para", "To")}: ${mail.to.join(", ")}`,
     ...(mail.cc.length ? [`Cc: ${mail.cc.join(", ")}`] : []),
-    `Asunto: ${subject}`,
+    `${tr("Asunto", "Subject")}: ${subject}`,
     "",
     clip(body, 500),
   ].join("\n");
@@ -1424,7 +1431,7 @@ async function prepareEmail(
 function whenWord(hour: number, minute: number, tz: string): string {
   const date = nextOccurrenceDate(hour, minute, tz);
   const today = utcMsToLocal(Date.now(), tz).slice(0, 10);
-  return date === today ? "hoy" : "mañana";
+  return date === today ? tr("hoy", "today") : tr("mañana", "tomorrow");
 }
 
 function describeNewAlarm(
@@ -1633,7 +1640,10 @@ async function runTool(
       return commit(
         ctx,
         "create",
-        `Crear "${title}": ${formatLocal(start)} a ${formatLocal(end).split(", ").pop()}` +
+        tr(
+          `Crear "${title}": ${formatLocal(start)} a ${formatLocal(end).split(", ").pop()}`,
+          `Create "${title}": ${formatLocal(start)} to ${formatLocal(end).split(", ").pop()}`
+        ) +
           (location ? ` (${location})` : "") +
           (problem.warning ? ` ⚠ ${problem.warning}` : ""),
         { title, start, end, timeZone: ctx.tz, location }
@@ -1668,7 +1678,10 @@ async function runTool(
       return commit(
         ctx,
         "reschedule",
-        `Mover "${title}" de ${formatInstant(event.start, ctx.tz)} a ${formatLocal(start)}` +
+        tr(
+          `Mover "${title}" de ${formatInstant(event.start, ctx.tz)} a ${formatLocal(start)}`,
+          `Move "${title}" from ${formatInstant(event.start, ctx.tz)} to ${formatLocal(start)}`
+        ) +
           (problem.warning ? ` ⚠ ${problem.warning}` : ""),
         { eventId, title, start, end, timeZone: ctx.tz }
       );
@@ -1685,7 +1698,7 @@ async function runTool(
       return savePending(
         ctx,
         "cancel",
-        `Cancelar "${title}" (${formatInstant(event.start, ctx.tz)})`,
+        tr(`Cancelar "${title}" (${formatInstant(event.start, ctx.tz)})`, `Cancel "${title}" (${formatInstant(event.start, ctx.tz)})`),
         { eventId, title }
       );
     }
@@ -1741,7 +1754,7 @@ async function runTool(
       }
 
       const body = { kind: "alarm_set" as const, ...hm, days, label };
-      return sendToDevice(ctx, body, `Crear alarma ${describeNewAlarm(body, ctx.tz)}`);
+      return sendToDevice(ctx, body, tr(`Crear alarma ${describeNewAlarm(body, ctx.tz)}`, `Create alarm ${describeNewAlarm(body, ctx.tz)}`));
     }
 
     case "update_alarm": {
@@ -1784,7 +1797,10 @@ async function runTool(
           },
           new: next,
         },
-        `Cambiar alarma ${describeAlarm(current)} por ${describeNewAlarm(next, ctx.tz)}`
+        tr(
+          `Cambiar alarma ${describeAlarm(current)} por ${describeNewAlarm(next, ctx.tz)}`,
+          `Change alarm ${describeAlarm(current)} to ${describeNewAlarm(next, ctx.tz)}`
+        )
       );
     }
 
@@ -1804,7 +1820,7 @@ async function runTool(
           days: current.days,
           label: current.label,
         },
-        `Cancelar alarma ${describeAlarm(current)}`
+        tr(`Cancelar alarma ${describeAlarm(current)}`, `Cancel alarm ${describeAlarm(current)}`)
       );
     }
 
@@ -1857,7 +1873,7 @@ async function runTool(
       return commit(
         ctx,
         sending ? "email_send" : "email_draft",
-        `${sending ? "Enviar correo" : "Crear borrador de correo"}\n${summary}`,
+        `${sending ? tr("Enviar correo", "Send email") : tr("Crear borrador de correo", "Create email draft")}\n${summary}`,
         { ...mail }
       );
     }
@@ -1873,7 +1889,7 @@ async function runTool(
       return commit(
         ctx,
         "email_modify",
-        `${action.label}: "${clip(meta.subject, 80) || "(sin asunto)"}" (de ${clip(meta.from, 60)})`,
+        `${modifyActionLabel(key as ModifyAction)}: "${clip(meta.subject, 80) || tr("(sin asunto)", "(no subject)")}" (${tr("de", "from")} ${clip(meta.from, 60)})`,
         { messageId: meta.id, action: key, add: [...action.add], remove: [...action.remove] }
       );
     }
@@ -1884,7 +1900,7 @@ async function runTool(
       return commit(
         ctx,
         "email_trash",
-        `Mover a la papelera: "${clip(meta.subject, 80) || "(sin asunto)"}" (de ${clip(meta.from, 60)})`,
+        `${tr("Mover a la papelera", "Move to trash")}: "${clip(meta.subject, 80) || tr("(sin asunto)", "(no subject)")}" (${tr("de", "from")} ${clip(meta.from, 60)})`,
         { messageId: meta.id }
       );
     }
@@ -2148,12 +2164,12 @@ export interface SendMessageInput {
 /** Gemini respondió, pero sin texto: se explica el motivo en lenguaje simple. */
 function emptyReplyText(finishReason?: string, blockReason?: string): string {
   if (blockReason || (finishReason && /SAFETY|PROHIBITED|BLOCKLIST|SPII|RECITATION/i.test(finishReason))) {
-    return "No puedo responder a ese mensaje. Prueba decirlo de otra forma.";
+    return tr("No puedo responder a ese mensaje. Prueba decirlo de otra forma.", "I can't answer that message. Try saying it another way.");
   }
   if (finishReason === "MAX_TOKENS") {
-    return "Mi respuesta quedó demasiado larga y se cortó. Pídeme algo más puntual y lo intento de nuevo.";
+    return tr("Mi respuesta quedó demasiado larga y se cortó. Pídeme algo más puntual y lo intento de nuevo.", "My reply got too long and was cut off. Ask me something more specific and I'll try again.");
   }
-  return "No logré armar una respuesta esta vez. Prueba reformular tu mensaje o intenta de nuevo en un momento.";
+  return tr("No logré armar una respuesta esta vez. Prueba reformular tu mensaje o intenta de nuevo en un momento.", "I couldn't put together an answer this time. Try rephrasing your message or try again in a moment.");
 }
 
 // ---------------------------------------------------------------------------
@@ -2293,7 +2309,7 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
   // Clima del lugar del usuario sin ubicación todavía: se pide ya (0 solicitudes). La app la obtiene y reenvía el
   // mensaje; antes el modelo pedía get_forecast, el servidor cortaba y se gastaba una solicitud para nada.
   if (plan.weatherNeedsLocation && toolAllowed(settings.appAccess, "get_forecast")) {
-    return { ...makeReply("Necesito tu ubicación aproximada para continuar."), locationRequest: true };
+    return { ...makeReply(tr("Necesito tu ubicación aproximada para continuar.", "I need your approximate location to continue.")), locationRequest: true };
   }
 
   // Consulta técnica o de cálculo: más razonamiento, más margen por intento y reglas de precisión en el prompt.
@@ -2487,7 +2503,7 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
     if (ctx.needsLocation) {
       // Sin respuesta del modelo: la app pide la ubicación y reenvía este mismo mensaje.
       return {
-        ...makeReply("Necesito tu ubicación aproximada para continuar."),
+        ...makeReply(tr("Necesito tu ubicación aproximada para continuar.", "I need your approximate location to continue.")),
         locationRequest: true,
       };
     }
@@ -2516,14 +2532,14 @@ export async function sendMessageToGemini(input: SendMessageInput): Promise<Chat
     const bare = (t: string) => t.replace(/[.\s]+$/, "");
     finalText = ctx.device
       ? ctx.device.requiresConfirmation
-        ? `${bare(ctx.device.description)}. ¿La confirmas?`
-        : `Hecho: ${bare(ctx.device.description)}.`
+        ? `${bare(ctx.device.description)}. ${tr("¿La confirmas?", "Do you confirm?")}`
+        : `${tr("Hecho", "Done")}: ${bare(ctx.device.description)}.`
       : ctx.executed
-      ? `Hecho: ${bare(ctx.executed.description)}.`
+      ? `${tr("Hecho", "Done")}: ${bare(ctx.executed.description)}.`
       : ctx.pending
-        ? `${bare(ctx.pending.description)}. ¿La confirmas?`
+        ? `${bare(ctx.pending.description)}. ${tr("¿La confirmas?", "Do you confirm?")}`
         : lowBlocked
-          ? LOW_NEEDS_MORE_STEPS
+          ? lowNeedsMoreStepsText()
           : emptyReplyText();
   }
 

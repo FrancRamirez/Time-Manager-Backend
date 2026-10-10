@@ -13,6 +13,7 @@ import { HttpError } from "./http";
 import { scanUser, type ScanResult } from "./scan";
 import { parseSettings, safeTimeZone } from "./schedule";
 import { readServiceAccount, sendPush } from "./fcm";
+import { runWithLang } from "./lang";
 
 export interface SweepSummary {
   /** false = falta FIREBASE_SERVICE_ACCOUNT: no se analiza nada (ver nota abajo). */
@@ -126,11 +127,15 @@ export async function runSweep(
 
       try {
         const raw = row.settings;
-        const scan = await scanUser({
-          userId: row.user_id,
-          tz: safeTimeZone(row.time_zone),
-          settings: parseSettings(typeof raw === "string" ? JSON.parse(raw) : raw),
-        });
+        const userSettings = parseSettings(typeof raw === "string" ? JSON.parse(raw) : raw);
+        // Los textos del análisis (motivos, descripciones) salen en el idioma que el usuario eligió en la app.
+        const scan = await runWithLang(userSettings.language, () =>
+          scanUser({
+            userId: row.user_id,
+            tz: safeTimeZone(row.time_zone),
+            settings: userSettings,
+          })
+        );
         summary.scanned++;
 
         const data = buildScanPush(scan);

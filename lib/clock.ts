@@ -3,6 +3,7 @@ import type { WhatsappBody } from "./whatsapp";
 import type { SmsBody, CallBody } from "./phoneActions";
 import type { MapsBody } from "./maps";
 import type { DidiBody } from "./didi";
+import { tr } from "./lang";
 
 // ---------------------------------------------------------------------------
 // Reloj del dispositivo (alarmas y temporizadores)
@@ -27,6 +28,8 @@ const DAY_LABEL: Record<Day, string> = {
   sat: "sáb",
   sun: "dom",
 };
+
+const DAY_LABEL_EN: Record<Day, string> = { mon: "Mon", tue: "Tue", wed: "Wed", thu: "Thu", fri: "Fri", sat: "Sat", sun: "Sun" };
 
 /** Alarma creada por el asistente, según el registro que guarda la app. */
 export interface DeviceAlarm {
@@ -161,12 +164,12 @@ export function normalizeDate(v: unknown): string | null {
 // ---------------------------------------------------------------------------
 
 export function describeDays(days: Day[]): string {
-  if (days.length === 0) return "una vez";
-  if (days.length === 7) return "todos los días";
+  if (days.length === 0) return tr("una vez", "once");
+  if (days.length === 7) return tr("todos los días", "every day");
   const key = days.join(",");
-  if (key === "mon,tue,wed,thu,fri") return "de lunes a viernes";
-  if (key === "sat,sun") return "sábados y domingos";
-  return days.map((d) => DAY_LABEL[d]).join(", ");
+  if (key === "mon,tue,wed,thu,fri") return tr("de lunes a viernes", "Monday to Friday");
+  if (key === "sat,sun") return tr("sábados y domingos", "weekends");
+  return days.map((d) => tr(DAY_LABEL[d], DAY_LABEL_EN[d])).join(", ");
 }
 
 export function describeAlarm(a: {

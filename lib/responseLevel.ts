@@ -14,6 +14,7 @@
 
 import { looksTechnical } from "./technical";
 import { parseFinanceRequest, type FinanceRequest } from "./financeText";
+import { tr } from "./lang";
 
 export type ResponseLevel = "low" | "medium" | "high";
 
@@ -74,6 +75,14 @@ export function toolAllowedAtLevel(level: ResponseLevel, tool: string): boolean 
 
 export const LOW_NEEDS_MORE_STEPS =
   "En el nivel Baja no puedo hacer esa consulta (necesita más de un paso). Para esto necesito más pasos: cambia el Nivel de respuestas a Media en Ajustes.";
+
+/** El aviso del nivel Baja en el idioma de la solicitud (LOW_NEEDS_MORE_STEPS sigue siendo la señal interna). */
+export function lowNeedsMoreStepsText(): string {
+  return tr(
+    LOW_NEEDS_MORE_STEPS,
+    "On the Low level I can't make that request (it needs more than one step). For this I need more steps: change the Answer level to Medium in Settings."
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Protecciones del bucle
@@ -297,13 +306,15 @@ interface ForecastDay { date?: string; conditions?: string; min_c?: number | nul
 
 const DAY = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
+const DAY_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 function dayName(date: string | undefined, index: number): string {
-  if (index === 0) return "Hoy";
-  if (index === 1) return "Mañana";
+  if (index === 0) return tr("Hoy", "Today");
+  if (index === 1) return tr("Mañana", "Tomorrow");
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(date ?? "");
-  if (!m) return `Día ${index + 1}`;
+  if (!m) return tr(`Día ${index + 1}`, `Day ${index + 1}`);
   const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
-  return DAY[d.getUTCDay()].replace(/^./, (c) => c.toUpperCase());
+  return tr(DAY[d.getUTCDay()], DAY_EN[d.getUTCDay()]).replace(/^./, (c) => c.toUpperCase());
 }
 
 /** Resumen del pronóstico armado por el servidor (nivel Baja: no hay otra solicitud para redactarlo). */
@@ -312,13 +323,17 @@ export function forecastTemplate(result: unknown): string | null {
   const r = result as { error?: string; location?: string; now?: { temp_c?: number | null; conditions?: string }; daily?: ForecastDay[] };
   if (r.error || !Array.isArray(r.daily) || !r.daily.length) return null;
   const lines: string[] = [];
-  const where = r.location && r.location !== "ubicación aproximada del usuario" ? ` en ${oneLine(r.location, 60)}` : "";
-  lines.push(`Pronóstico${where}:`);
-  if (r.now && typeof r.now.temp_c === "number") lines.push(`Ahora: ${r.now.temp_c} °C${r.now.conditions ? `, ${r.now.conditions}` : ""}.`);
+  const place = r.location && r.location !== "ubicación aproximada del usuario" ? oneLine(r.location, 60) : "";
+  const where = place ? tr(` en ${place}`, ` in ${place}`) : "";
+  lines.push(tr(`Pronóstico${where}:`, `Forecast${where}:`));
+  if (r.now && typeof r.now.temp_c === "number") lines.push(tr(`Ahora: ${r.now.temp_c} °C${r.now.conditions ? `, ${r.now.conditions}` : ""}.`, `Now: ${r.now.temp_c} °C${r.now.conditions ? `, ${r.now.conditions}` : ""}.`));
   r.daily.slice(0, 3).forEach((d, i) => {
-    const t = typeof d.min_c === "number" && typeof d.max_c === "number" ? `${d.min_c} a ${d.max_c} °C` : "sin temperatura";
-    const rain = typeof d.rain_chance_pct === "number" ? `, lluvia ${d.rain_chance_pct} %` : "";
-    lines.push(`- ${dayName(d.date, i)}: ${d.conditions ?? "sin datos"}, ${t}${rain}.`);
+    const t =
+      typeof d.min_c === "number" && typeof d.max_c === "number"
+        ? tr(`${d.min_c} a ${d.max_c} °C`, `${d.min_c} to ${d.max_c} °C`)
+        : tr("sin temperatura", "no temperature");
+    const rain = typeof d.rain_chance_pct === "number" ? tr(`, lluvia ${d.rain_chance_pct} %`, `, rain ${d.rain_chance_pct} %`) : "";
+    lines.push(`- ${dayName(d.date, i)}: ${d.conditions ?? tr("sin datos", "no data")}, ${t}${rain}.`);
   });
   return lines.join("\n");
 }
